@@ -30,8 +30,8 @@ namespace VulkanRaytracing
         VkSurfaceKHR surface;
         VkSwapchainKHR swapchain;
 
-        VkSemaphore* semaphoreImageAvailable;
-        VkSemaphore* semaphoreRenderingAvailable = null;
+        VkSemaphore semaphoreImageAvailable;
+        VkSemaphore semaphoreRenderingAvailable;
 
         VkImage offscreenBuffer;
         VkImageView offscreenBufferView;
@@ -326,7 +326,7 @@ namespace VulkanRaytracing
         {
             window = new Form();
             window.Text = "VK KHR Raytracing Vulkan Triangle";
-            window.Size = new System.Drawing.Size(800, 600);
+            window.Size = new System.Drawing.Size((int)desiredWindowWidth, (int)desiredWindowHeight);
             window.FormBorderStyle = FormBorderStyle.FixedToolWindow;
             window.Show();
 
@@ -578,16 +578,23 @@ namespace VulkanRaytracing
             Debug.WriteLine("Initializing Swapchain..");
 
             uint presentModeCount = 0;
-            VulkanNative.vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, null);
+            result = VulkanNative.vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, null);
+            Helpers.CheckErrors(result);
 
             VkPresentModeKHR[] presentModes = new VkPresentModeKHR[presentModeCount];
             fixed (VkPresentModeKHR* presentModesPtr = &presentModes[0])
             {
-                VulkanNative.vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, presentModesPtr);
+                result = VulkanNative.vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, presentModesPtr);
+                Helpers.CheckErrors(result);
             }
 
             bool isMailboxModeSupported = presentModes.Any(m => m == VkPresentModeKHR.VK_PRESENT_MODE_MAILBOX_KHR);
 
+            VkSurfaceCapabilitiesKHR capabilitiesKHR;
+            result = VulkanNative.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &capabilitiesKHR);
+            Helpers.CheckErrors(result);
+
+            var extent = ChooseSwapExtent(capabilitiesKHR);
             VkSwapchainCreateInfoKHR swapchainInfo = new VkSwapchainCreateInfoKHR()
             {
                 sType = VkStructureType.VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
@@ -596,7 +603,7 @@ namespace VulkanRaytracing
                 minImageCount = 3,
                 imageFormat = desiredSurfaceFormat,
                 imageColorSpace = VkColorSpaceKHR.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
-                imageExtent = new VkExtent2D(desiredWindowWidth, desiredWindowHeight),
+                imageExtent = extent, //new VkExtent2D(desiredWindowWidth, desiredWindowHeight),
                 imageArrayLayers = 1,
                 imageUsage = VkImageUsageFlagBits.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VkImageUsageFlagBits.VK_IMAGE_USAGE_TRANSFER_DST_BIT,
                 imageSharingMode = VkSharingMode.VK_SHARING_MODE_EXCLUSIVE,
@@ -610,19 +617,20 @@ namespace VulkanRaytracing
 
             fixed (VkSwapchainKHR* swapchainPtr = &swapchain)
             {
-                VulkanNative.vkCreateSwapchainKHR(device, &swapchainInfo, null, swapchainPtr);
+                result = VulkanNative.vkCreateSwapchainKHR(device, &swapchainInfo, null, swapchainPtr);
+                Helpers.CheckErrors(result);
             }
 
             uint amountOfImagesInSwapchain = 0;
-            VulkanNative.vkGetSwapchainImagesKHR(device, swapchain, &amountOfImagesInSwapchain, null);
-            VkImage[] swapchainImages = new VkImage[] { amountOfImagesInSwapchain };
+            result = VulkanNative.vkGetSwapchainImagesKHR(device, swapchain, &amountOfImagesInSwapchain, null);
+            Helpers.CheckErrors(result);
 
-            fixed (VkImage* swapchainImagesPtr = &swapchainImages[0])
-            {
-                VulkanNative.vkGetSwapchainImagesKHR(device, swapchain, &amountOfImagesInSwapchain, swapchainImagesPtr);
-            }
+            VkImage* swapchainImages = stackalloc VkImage[] { amountOfImagesInSwapchain };
 
-            VkImageView[] imageViews = new VkImageView[] { amountOfImagesInSwapchain };
+            result = VulkanNative.vkGetSwapchainImagesKHR(device, swapchain, &amountOfImagesInSwapchain, swapchainImages);
+            Helpers.CheckErrors(result);
+
+            VkImageView* imageViews = stackalloc VkImageView[] { amountOfImagesInSwapchain };
 
 
             for (uint ii = 0; ii < amountOfImagesInSwapchain; ++ii)
@@ -644,10 +652,8 @@ namespace VulkanRaytracing
                     },
                 };
 
-                fixed (VkImageView* imageViewsPtr = &imageViews[ii])
-                {
-                    VulkanNative.vkCreateImageView(device, &imageViewInfo, null, imageViewsPtr);
-                }
+                result = VulkanNative.vkCreateImageView(device, &imageViewInfo, null, imageViews);
+                Helpers.CheckErrors(result);
             };
 
             Debug.WriteLine("Recording frame commands..");
@@ -668,7 +674,7 @@ namespace VulkanRaytracing
                     baseArrayLayer = 0,
                     layerCount = 1,
                 },
-                extent = new VkExtent3D() { depth = 1, width = desiredWindowWidth, height = desiredWindowHeight },
+                extent = new VkExtent3D() { depth = 1, width = swapchainInfo.imageExtent.width, height = swapchainInfo.imageExtent.height },
             };
 
             VkImageSubresourceRange subresourceRange = new VkImageSubresourceRange()
@@ -724,7 +730,8 @@ namespace VulkanRaytracing
             commandBuffers = new VkCommandBuffer[amountOfImagesInSwapchain];
             fixed (VkCommandBuffer* commandBuffersPtr = &commandBuffers[0])
             {
-                VulkanNative.vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, commandBuffersPtr);
+                result = VulkanNative.vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, commandBuffersPtr);
+                Helpers.CheckErrors(result);
             }
 
             VkCommandBufferBeginInfo commandBufferBeginInfo = new VkCommandBufferBeginInfo()
@@ -740,7 +747,8 @@ namespace VulkanRaytracing
                 VkCommandBuffer commandBuffer = commandBuffers[ii];
                 VkImage swapchainImage = swapchainImages[ii];
 
-                VulkanNative.vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo);
+                result = VulkanNative.vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo);
+                Helpers.CheckErrors(result);
 
                 // transition offscreen buffer into shader writeable state
                 InsertCommandImageBarrier(commandBuffer, offscreenBuffer, 0, VkAccessFlagBits.VK_ACCESS_SHADER_WRITE_BIT, VkImageLayout.VK_IMAGE_LAYOUT_UNDEFINED, VkImageLayout.VK_IMAGE_LAYOUT_GENERAL, subresourceRange);
@@ -765,7 +773,8 @@ namespace VulkanRaytracing
                 // transition swapchain image into presentable state
                 InsertCommandImageBarrier(commandBuffer, swapchainImage, 0, VkAccessFlagBits.VK_ACCESS_TRANSFER_WRITE_BIT, VkImageLayout.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VkImageLayout.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, subresourceRange);
 
-                VulkanNative.vkEndCommandBuffer(commandBuffer);
+                result = VulkanNative.vkEndCommandBuffer(commandBuffer);
+                Helpers.CheckErrors(result);
             };
 
             VkSemaphoreCreateInfo semaphoreInfo = new VkSemaphoreCreateInfo()
@@ -774,57 +783,88 @@ namespace VulkanRaytracing
                 pNext = null,
             };
 
-            VulkanNative.vkCreateSemaphore(device, &semaphoreInfo, null, semaphoreImageAvailable);
+            fixed (VkSemaphore* semaphoreImageAvailablePtr = &semaphoreImageAvailable)
+            {
+                result = VulkanNative.vkCreateSemaphore(device, &semaphoreInfo, null, semaphoreImageAvailablePtr);
+                Helpers.CheckErrors(result);
+            }
 
-            VulkanNative.vkCreateSemaphore(device, &semaphoreInfo, null, semaphoreRenderingAvailable);
+            fixed (VkSemaphore* semaphoreRenderingAvailablePtr = &semaphoreRenderingAvailable)
+            {
+                result = VulkanNative.vkCreateSemaphore(device, &semaphoreInfo, null, semaphoreRenderingAvailablePtr);
+                Helpers.CheckErrors(result);
+            }
 
             Debug.WriteLine("Done!"); ;
             Debug.WriteLine("Drawing..");
 
-            // Draw Frame
-            uint imageIndex = 0;
-            VulkanNative.vkAcquireNextImageKHR(device, swapchain, ulong.MaxValue, *(semaphoreImageAvailable), default, &imageIndex);
-
-            VkPipelineStageFlagBits* waitStageMasks = stackalloc VkPipelineStageFlagBits[] { VkPipelineStageFlagBits.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-
-            VkSubmitInfo submitInfo;
-            fixed (VkCommandBuffer* commandBuffersPtr = &commandBuffers[imageIndex])
+            bool isClosing = false;
+            window.FormClosing += (s, e) =>
             {
-                submitInfo = new VkSubmitInfo()
-                {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_SUBMIT_INFO,
-                    pNext = null,
-                    waitSemaphoreCount = 1,
-                    pWaitSemaphores = semaphoreImageAvailable,
-                    pWaitDstStageMask = waitStageMasks,
-                    commandBufferCount = 1,
-                    pCommandBuffers = commandBuffersPtr,
-                    signalSemaphoreCount = 1,
-                    pSignalSemaphores = semaphoreRenderingAvailable,
-                };
-            }
-
-            VulkanNative.vkQueueSubmit(queue, 1, &submitInfo, default);
-
-            VkSwapchainKHR* swapChains = stackalloc VkSwapchainKHR[] { swapchain };
-            VkPresentInfoKHR presentInfo = new VkPresentInfoKHR()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-                pNext = null,
-                waitSemaphoreCount = 1,
-                pWaitSemaphores = semaphoreRenderingAvailable,
-                swapchainCount = 1,
-                pSwapchains = swapChains,
-                pImageIndices = &imageIndex,
-                pResults = null,
+                isClosing = true;
             };
 
-            VulkanNative.vkQueuePresentKHR(queue, &presentInfo);
-            VulkanNative.vkQueueWaitIdle(queue);
+            while (!isClosing)
+            {
 
+                // Draw Frame
+                uint imageIndex = 0;
+                result = VulkanNative.vkAcquireNextImageKHR(device, swapchain, ulong.MaxValue, semaphoreImageAvailable, 0, &imageIndex);
+                Helpers.CheckErrors(result);
+
+                VkPipelineStageFlagBits* waitStageMasks = stackalloc VkPipelineStageFlagBits[] { VkPipelineStageFlagBits.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+
+                VkSubmitInfo submitInfo;
+                fixed (VkCommandBuffer* commandBuffersPtr = &commandBuffers[imageIndex])
+                fixed (VkSemaphore* semaphoreImageAvailablePtr = &semaphoreImageAvailable)
+                fixed (VkSemaphore* semaphoreRenderingAvailablePtr = &semaphoreRenderingAvailable)
+                {
+                    submitInfo = new VkSubmitInfo()
+                    {
+                        sType = VkStructureType.VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                        pNext = null,
+                        waitSemaphoreCount = 1,
+                        pWaitSemaphores = semaphoreImageAvailablePtr,
+                        pWaitDstStageMask = waitStageMasks,
+                        commandBufferCount = 1,
+                        pCommandBuffers = commandBuffersPtr,
+                        signalSemaphoreCount = 1,
+                        pSignalSemaphores = semaphoreRenderingAvailablePtr,
+                    };
+                }
+
+                result = VulkanNative.vkQueueSubmit(queue, 1, &submitInfo, 0);
+                Helpers.CheckErrors(result);
+
+                VkSwapchainKHR* swapChains = stackalloc VkSwapchainKHR[] { swapchain };
+                VkPresentInfoKHR presentInfo;
+                fixed (VkSemaphore* semaphoreRenderingAvailablePtr = &semaphoreRenderingAvailable)
+                {
+                    presentInfo = new VkPresentInfoKHR()
+                    {
+                        sType = VkStructureType.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+                        pNext = null,
+                        waitSemaphoreCount = 1,
+                        pWaitSemaphores = semaphoreRenderingAvailablePtr,
+                        swapchainCount = 1,
+                        pSwapchains = swapChains,
+                        pImageIndices = &imageIndex,
+                        pResults = null,
+                    };
+                }
+
+                result = VulkanNative.vkQueuePresentKHR(queue, &presentInfo);
+                Helpers.CheckErrors(result);
+
+                result = VulkanNative.vkQueueWaitIdle(queue);
+                Helpers.CheckErrors(result);
+
+                Application.DoEvents();
+            }
 
             return 0;
         }
+
         private void CreateBottomLevelContainer()
         {
             Debug.WriteLine("Creating Bottom-Level Acceleration Structure..");
@@ -854,11 +894,9 @@ namespace VulkanRaytracing
             };
 
             VkResult result;
-            VkAllocationCallbacks callbacks = new VkAllocationCallbacks();
-
             fixed (VkAccelerationStructureKHR* bottomLevelASPtr = &bottomLevelAS)
             {
-                result = VulkanNative.vkCreateAccelerationStructureKHR(device, &accelerationInfo, &callbacks, bottomLevelASPtr);
+                result = VulkanNative.vkCreateAccelerationStructureKHR(device, &accelerationInfo, null, bottomLevelASPtr);
                 Helpers.CheckErrors(result);
             }
 
@@ -1268,52 +1306,48 @@ namespace VulkanRaytracing
             };
 
             VkDescriptorSetLayoutBinding* bindings = stackalloc VkDescriptorSetLayoutBinding[] { accelerationStructureLayoutBinding, storageImageLayoutBinding };
-            VkDescriptorSetLayoutCreateInfo layoutInfo;
-            layoutInfo = new VkDescriptorSetLayoutCreateInfo()
+            VkDescriptorSetLayoutCreateInfo layoutInfo = new VkDescriptorSetLayoutCreateInfo()
             {
                 sType = VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
                 pNext = null,
-                flags = 0,
+                flags = VkDescriptorSetLayoutCreateFlagBits.None,
                 bindingCount = (uint)2,
                 pBindings = bindings,
             };
 
             VkResult result;
-            VkDescriptorSetLayout newDescriptorSetLayout;
-            result = VulkanNative.vkCreateDescriptorSetLayout(device, &layoutInfo, null, &newDescriptorSetLayout);
-            Helpers.CheckErrors(result);
-            descriptorSetLayout = newDescriptorSetLayout;
+            fixed (VkDescriptorSetLayout* descriptorSetLayoutPtr = &descriptorSetLayout)
+            {
+                result = VulkanNative.vkCreateDescriptorSetLayout(device, &layoutInfo, null, descriptorSetLayoutPtr);
+                Helpers.CheckErrors(result);
+            }
         }
         private void RTDescriptorSet()
         {
             Debug.WriteLine("Creating RT Descriptor Set..");
 
-            VkDescriptorPoolSize[] poolSizes = new VkDescriptorPoolSize[] {
-                    new VkDescriptorPoolSize()
-                    {
-                        type = VkDescriptorType.VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
-                        descriptorCount = 1,
-                    },
-                    new VkDescriptorPoolSize()
-                    {
-                        type = VkDescriptorType.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                        descriptorCount = 1,
-                    }
-                };
-
-            VkDescriptorPoolCreateInfo descriptorPoolInfo;
-            fixed (VkDescriptorPoolSize* poolSizesPtr = &poolSizes[0])
-            {
-                descriptorPoolInfo = new VkDescriptorPoolCreateInfo()
+            VkDescriptorPoolSize* poolSizes = stackalloc VkDescriptorPoolSize[] {
+                new VkDescriptorPoolSize()
                 {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-                    pNext = null,
-                    flags = 0,
-                    maxSets = 1,
-                    poolSizeCount = (uint)poolSizes.Length,
-                    pPoolSizes = poolSizesPtr,
-                };
-            }
+                    type = VkDescriptorType.VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+                    descriptorCount = 1,
+                },
+                new VkDescriptorPoolSize()
+                {
+                    type = VkDescriptorType.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                    descriptorCount = 1,
+                }
+            };
+
+            VkDescriptorPoolCreateInfo descriptorPoolInfo = new VkDescriptorPoolCreateInfo()
+            {
+                sType = VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+                pNext = null,
+                flags = 0,
+                maxSets = 1,
+                poolSizeCount = (uint)2,
+                pPoolSizes = poolSizes,
+            };
 
             VkResult result;
             fixed (VkDescriptorPool* descriptorPoolPtr = &descriptorPool)
@@ -1381,11 +1415,8 @@ namespace VulkanRaytracing
                 pImageInfo = &storageImageInfo,
             };
 
-            VkWriteDescriptorSet[] descriptorWrites = new VkWriteDescriptorSet[] { accelerationStructureWrite, outputImageWrite };
-            fixed (VkWriteDescriptorSet* descriptorWritesPtr = &descriptorWrites[0])
-            {
-                VulkanNative.vkUpdateDescriptorSets(device, (uint)descriptorWrites.Length, descriptorWritesPtr, 0, null);
-            }
+            VkWriteDescriptorSet* descriptorWrites = stackalloc VkWriteDescriptorSet[] { accelerationStructureWrite, outputImageWrite };
+            VulkanNative.vkUpdateDescriptorSets(device, (uint)2, descriptorWrites, 0, null);
         }
         private void RTPipelineLayout()
         {
@@ -1447,7 +1478,7 @@ namespace VulkanRaytracing
                 pName = "main".ToPointer(),
             };
 
-            VkPipelineShaderStageCreateInfo[] shaderStages = new VkPipelineShaderStageCreateInfo[] { rayGenShaderStageInfo, rayChitShaderStageInfo, rayMissShaderStageInfo };
+            VkPipelineShaderStageCreateInfo* shaderStages = stackalloc VkPipelineShaderStageCreateInfo[] { rayGenShaderStageInfo, rayChitShaderStageInfo, rayMissShaderStageInfo };
 
             VkRayTracingShaderGroupCreateInfoKHR rayGenGroup = new VkRayTracingShaderGroupCreateInfoKHR()
             {
@@ -1455,9 +1486,9 @@ namespace VulkanRaytracing
                 pNext = null,
                 type = VkRayTracingShaderGroupTypeKHR.VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
                 generalShader = 0,
-                closestHitShader = 0,
-                anyHitShader = 0,
-                intersectionShader = 0,
+                closestHitShader = ~0U,
+                anyHitShader = ~0U,
+                intersectionShader = ~0U,
             };
 
             VkRayTracingShaderGroupCreateInfoKHR rayHitGroup = new VkRayTracingShaderGroupCreateInfoKHR()
@@ -1465,10 +1496,10 @@ namespace VulkanRaytracing
                 sType = VkStructureType.VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
                 pNext = null,
                 type = VkRayTracingShaderGroupTypeKHR.VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR,
-                generalShader = 0,
+                generalShader = ~0U,
                 closestHitShader = 1,
-                anyHitShader = 0,
-                intersectionShader = 0,
+                anyHitShader = ~0U,
+                intersectionShader = ~0U,
             };
 
             VkRayTracingShaderGroupCreateInfoKHR rayMissGroup = new VkRayTracingShaderGroupCreateInfoKHR()
@@ -1477,40 +1508,36 @@ namespace VulkanRaytracing
                 pNext = null,
                 type = VkRayTracingShaderGroupTypeKHR.VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
                 generalShader = 2,
-                closestHitShader = 0,
-                anyHitShader = 0,
-                intersectionShader = 0,
+                closestHitShader = ~0U,
+                anyHitShader = ~0U,
+                intersectionShader = ~0U,
             };
 
-            VkRayTracingShaderGroupCreateInfoKHR[] shaderGroups = new VkRayTracingShaderGroupCreateInfoKHR[] { rayGenGroup, rayHitGroup, rayMissGroup };
+            VkRayTracingShaderGroupCreateInfoKHR* shaderGroups = stackalloc VkRayTracingShaderGroupCreateInfoKHR[] { rayGenGroup, rayHitGroup, rayMissGroup };
 
-            VkRayTracingPipelineCreateInfoKHR pipelineInfo;
-            fixed (VkPipelineShaderStageCreateInfo* shaderStagesPtr = &shaderStages[0])
-            fixed (VkRayTracingShaderGroupCreateInfoKHR* shaderGroupsPtr = &shaderGroups[0])
+            VkRayTracingPipelineCreateInfoKHR pipelineInfo = new VkRayTracingPipelineCreateInfoKHR()
             {
-                pipelineInfo = new VkRayTracingPipelineCreateInfoKHR()
+                sType = VkStructureType.VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR,
+                pNext = null,
+                flags = 0,
+                stageCount = (uint)3,
+                pStages = shaderStages,
+                groupCount = (uint)3,
+                pGroups = shaderGroups,
+                maxRecursionDepth = 1,
+                libraries = new VkPipelineLibraryCreateInfoKHR()
                 {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR,
+                    sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR,
                     pNext = null,
-                    flags = 0,
-                    stageCount = (uint)shaderStages.Length,
-                    pStages = shaderStagesPtr,
-                    groupCount = (uint)shaderGroups.Length,
-                    pGroups = shaderGroupsPtr,
-                    maxRecursionDepth = 1,
-                    libraries = new VkPipelineLibraryCreateInfoKHR()
-                    {
-                        sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR,
-                        pNext = null,
-                        libraryCount = 0,
-                        pLibraries = null,
-                    },
-                    pLibraryInterface = null,
-                    layout = pipelineLayout,
-                    basePipelineHandle = default,
-                    basePipelineIndex = 0,
-                };
-            }
+                    libraryCount = 0,
+                    pLibraries = null,
+                },
+                pLibraryInterface = null,
+                layout = pipelineLayout,
+                basePipelineHandle = default,
+                basePipelineIndex = 0,
+            };
+
 
             VkResult result;
             fixed (VkPipeline* pipelinePtr = &pipeline)
@@ -1572,6 +1599,20 @@ namespace VulkanRaytracing
             Helpers.CheckErrors(result);
 
             VulkanNative.vkUnmapMemory(device, shaderBindingTable.memory);
+        }
+
+        private VkExtent2D ChooseSwapExtent(VkSurfaceCapabilitiesKHR capabilities)
+        {
+            if (capabilities.currentExtent.width != uint.MaxValue)
+            {
+                return capabilities.currentExtent;
+            }
+
+            return new VkExtent2D()
+            {
+                width = Math.Max(capabilities.minImageExtent.width, Math.Min(capabilities.maxImageExtent.width, (uint)this.desiredWindowWidth)),
+                height = Math.Max(capabilities.minImageExtent.height, Math.Min(capabilities.maxImageExtent.height, (uint)this.desiredWindowHeight)),
+            };
         }
     }
 }
