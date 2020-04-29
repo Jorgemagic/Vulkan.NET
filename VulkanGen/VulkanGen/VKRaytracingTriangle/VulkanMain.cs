@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
@@ -51,13 +52,11 @@ namespace VulkanRaytracing
         VkFormat desiredSurfaceFormat = VkFormat.VK_FORMAT_B8G8R8A8_UNORM;
 
         Form window;
-        IntPtr windowInstance;
 
         VkCommandBuffer[] commandBuffers;
-        private VkPhysicalDeviceRayTracingPropertiesKHR rayTracingProperties;
-        private VkAccelerationStructureGeometryKHR[] accelerationGeometries;
+        private VkPhysicalDeviceRayTracingPropertiesKHR rayTracingProperties;        
 
-        string appName = "VK_KHR_ray_tracing triangle";
+        string appName = "VK KHR Raytracing Vulkan Triangle";
 
         string[] instanceExtensions = new string[] {
             "VK_KHR_surface",
@@ -325,7 +324,7 @@ namespace VulkanRaytracing
         public int Main()
         {
             window = new Form();
-            window.Text = "VK KHR Raytracing Vulkan Triangle";
+            window.Text = appName;
             window.Size = new System.Drawing.Size((int)desiredWindowWidth, (int)desiredWindowHeight);
             window.FormBorderStyle = FormBorderStyle.FixedToolWindow;
             window.Show();
@@ -348,7 +347,7 @@ namespace VulkanRaytracing
             {
                 sType = VkStructureType.VK_STRUCTURE_TYPE_APPLICATION_INFO,
                 pNext = null,
-                pApplicationName = "Hello Triangle".ToPointer(),
+                pApplicationName = appName.ToPointer(),
                 applicationVersion = Helpers.Version(1, 0, 0),
                 pEngineName = "No Engine".ToPointer(),
                 engineVersion = Helpers.Version(1, 0, 0),
@@ -498,7 +497,7 @@ namespace VulkanRaytracing
                 sType = VkStructureType.VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
                 pNext = null,
                 flags = 0,
-                hinstance = windowInstance,
+                hinstance = Process.GetCurrentProcess().Handle,
                 hwnd = window.Handle,
             };
 
@@ -919,12 +918,19 @@ namespace VulkanRaytracing
                     -1.0f, +1.0f, +0.0f,
                     +0.0f, -1.0f, +0.0f
                 };
-
             uint[] indices = { 0, 1, 2 };
+            //Vector3[] vertices = new Vector3[]
+            //{
+            //    new Vector3( 1.0f,  1.0f, 1.0f),
+            //    new Vector3(-1.0f,  1.0f, 1.0f),
+            //    new Vector3( 1.0f, -1.0f, 1.0f),
+            //};
+
+            //ushort[] indices = { 0, 1, 2 };
 
             AccelerationMemory vertexBuffer = CreateMappedBuffer(vertices, (uint)(sizeof(float) * vertices.Length));
 
-            AccelerationMemory indexBuffer = CreateMappedBuffer(indices, (uint)(sizeof(uint) * indices.Length));
+            AccelerationMemory indexBuffer = CreateMappedBuffer(indices, (uint)(sizeof(ushort) * indices.Length));
 
             VkAccelerationStructureGeometryKHR accelerationGeometry = new VkAccelerationStructureGeometryKHR()
             {
@@ -940,7 +946,7 @@ namespace VulkanRaytracing
                         pNext = null,
                         vertexFormat = VkFormat.VK_FORMAT_R32G32B32_SFLOAT,
                         vertexData = new VkDeviceOrHostAddressConstKHR() { deviceAddress = vertexBuffer.memoryAddress },
-                        vertexStride = 3 * sizeof(float),
+                        vertexStride = (ulong)3 * sizeof(float),
                         indexType = VkIndexType.VK_INDEX_TYPE_UINT32,
                         indexData = new VkDeviceOrHostAddressConstKHR() { deviceAddress = indexBuffer.memoryAddress },
                         transformData = default,
@@ -948,7 +954,7 @@ namespace VulkanRaytracing
                 },
             };
 
-            accelerationGeometries = new VkAccelerationStructureGeometryKHR[] { accelerationGeometry };
+            VkAccelerationStructureGeometryKHR[] accelerationGeometries = new VkAccelerationStructureGeometryKHR[] { accelerationGeometry };
             VkAccelerationStructureBuildGeometryInfoKHR accelerationBuildGeometryInfo;
             fixed (VkAccelerationStructureGeometryKHR* ppGeometries = &accelerationGeometries[0])
             {
@@ -1073,7 +1079,7 @@ namespace VulkanRaytracing
             BindAccelerationMemory(topLevelAS, objectMemory.memory);
 
             AccelerationMemory buildScratchMemory = CreateAccelerationScratchBuffer(topLevelAS, VkAccelerationStructureMemoryRequirementsTypeKHR.VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_KHR);
-
+            
             VkAccelerationStructureInstanceKHR[] instances = new VkAccelerationStructureInstanceKHR[]
             {
                     new VkAccelerationStructureInstanceKHR()
@@ -1084,10 +1090,12 @@ namespace VulkanRaytracing
                             matrix_1 = 0.0f,
                             matrix_2 = 0.0f,
                             matrix_3 = 0.0f,
+
                             matrix_4 = 0.0f,
                             matrix_5 = 1.0f,
                             matrix_6 = 0.0f,
                             matrix_7 = 0.0f,
+
                             matrix_8 = 0.0f,
                             matrix_9 = 0.0f,
                             matrix_10 = 1.0f,
@@ -1121,6 +1129,7 @@ namespace VulkanRaytracing
                 }
             };
 
+            VkAccelerationStructureGeometryKHR[] accelerationGeometries = new VkAccelerationStructureGeometryKHR[] { accelerationGeometry };
             VkAccelerationStructureBuildGeometryInfoKHR accelerationBuildGeometryInfo;
             fixed (VkAccelerationStructureGeometryKHR* ppGeometries = &accelerationGeometries[0])
             {
@@ -1438,10 +1447,11 @@ namespace VulkanRaytracing
             }
 
             VkResult result;
-            VkPipelineLayout newPipelineLayout;
-            result = VulkanNative.vkCreatePipelineLayout(device, &pipelineLayoutInfo, null, &newPipelineLayout);
-            Helpers.CheckErrors(result);
-            pipelineLayout = newPipelineLayout;
+            fixed (VkPipelineLayout* pipelineLayoutPtr = &pipelineLayout)
+            {
+                result = VulkanNative.vkCreatePipelineLayout(device, &pipelineLayoutInfo, null, pipelineLayoutPtr);
+                Helpers.CheckErrors(result);
+            }
         }
         private void RTPipeline()
         {
