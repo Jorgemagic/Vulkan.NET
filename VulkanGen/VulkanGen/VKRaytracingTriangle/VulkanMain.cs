@@ -930,7 +930,7 @@ namespace VulkanRaytracing
 
             AccelerationMemory vertexBuffer = CreateMappedBuffer(vertices, (uint)(sizeof(float) * vertices.Length));
 
-            AccelerationMemory indexBuffer = CreateMappedBuffer(indices, (uint)(sizeof(ushort) * indices.Length));
+            AccelerationMemory indexBuffer = CreateMappedBuffer(indices, (uint)(sizeof(uint) * indices.Length));
 
             VkAccelerationStructureGeometryKHR accelerationGeometry = new VkAccelerationStructureGeometryKHR()
             {
@@ -1006,7 +1006,7 @@ namespace VulkanRaytracing
             result = VulkanNative.vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo);
             Helpers.CheckErrors(result);
 
-            VulkanNative.vkCmdBuildAccelerationStructureKHR(commandBuffer, 1, &accelerationBuildGeometryInfo, (VkAccelerationStructureBuildOffsetInfoKHR**)&accelerationBuildOffsets);
+            VulkanNative.vkCmdBuildAccelerationStructureKHR(commandBuffer, 1, &accelerationBuildGeometryInfo, &accelerationBuildOffsets);
 
             result = VulkanNative.vkEndCommandBuffer(commandBuffer);
             Helpers.CheckErrors(result);
@@ -1181,7 +1181,7 @@ namespace VulkanRaytracing
             result = VulkanNative.vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo);
             Helpers.CheckErrors(result);
 
-            VulkanNative.vkCmdBuildAccelerationStructureKHR(commandBuffer, 1, &accelerationBuildGeometryInfo, (VkAccelerationStructureBuildOffsetInfoKHR**)&accelerationBuildOffsets);
+            VulkanNative.vkCmdBuildAccelerationStructureKHR(commandBuffer, 1, &accelerationBuildGeometryInfo, &accelerationBuildOffsets);
 
             result = VulkanNative.vkEndCommandBuffer(commandBuffer);
             Helpers.CheckErrors(result);
