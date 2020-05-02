@@ -54,7 +54,7 @@ namespace VulkanRaytracing
         Form window;
 
         VkCommandBuffer[] commandBuffers;
-        private VkPhysicalDeviceRayTracingPropertiesKHR rayTracingProperties;        
+        private VkPhysicalDeviceRayTracingPropertiesKHR rayTracingProperties;
 
         string appName = "VK KHR Raytracing Vulkan Triangle";
 
@@ -127,8 +127,11 @@ namespace VulkanRaytracing
         public AccelerationMemory CreateMappedBuffer<T>(T[] srcData, uint byteLength)
             where T : struct
         {
+            GCHandle gcHandle = GCHandle.Alloc(srcData, GCHandleType.Pinned);
+            IntPtr srcDataPtr = gcHandle.AddrOfPinnedObject();
             AccelerationMemory accelerationMemory = new AccelerationMemory();
 
+            // Buffer description
             VkBufferCreateInfo bufferInfo = new VkBufferCreateInfo()
             {
                 sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -173,12 +176,24 @@ namespace VulkanRaytracing
             result = VulkanNative.vkMapMemory(device, accelerationMemory.memory, 0, byteLength, 0, &dstData);
             Helpers.CheckErrors(result);
 
-            GCHandle gcHandle = GCHandle.Alloc(srcData, GCHandleType.Pinned);
-            Unsafe.CopyBlock((void*)dstData, (void*)gcHandle.AddrOfPinnedObject(), byteLength);
-            gcHandle.Free();
+
+            Unsafe.CopyBlock((void*)dstData, (void*)srcDataPtr, byteLength);
 
             VulkanNative.vkUnmapMemory(device, accelerationMemory.memory);
             accelerationMemory.mappedPointer = dstData;
+
+            /*IntPtr dataPtr;
+            result = VulkanNative.vkMapMemory(device, accelerationMemory.memory, 0, byteLength, 0, (void**)&dataPtr);
+            Helpers.CheckErrors(result);
+
+            for (int i = 0; i < (byteLength / sizeof(uint)); i++)
+            {
+                uint* pointer = (uint*)(dataPtr + (i * sizeof(uint)));
+              
+            }            
+
+            VulkanNative.vkUnmapMemory(device, accelerationMemory.memory);*/
+            gcHandle.Free();
 
             return accelerationMemory;
         }
@@ -262,7 +277,7 @@ namespace VulkanRaytracing
                 sType = VkStructureType.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
                 pNext = &memAllocFlagsInfo,
                 allocationSize = alloctionSize,
-                memoryTypeIndex = FindMemoryType(allocationMemoryBits, VkMemoryPropertyFlagBits.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+                memoryTypeIndex = FindMemoryType(allocationMemoryBits, VkMemoryPropertyFlagBits.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VkMemoryPropertyFlagBits.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT), //  VkMemoryPropertyFlagBits.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
             };
             result = VulkanNative.vkAllocateMemory(device, &memAllocInfo, null, &accelerationMemory.memory);
             Helpers.CheckErrors(result);
@@ -1079,7 +1094,7 @@ namespace VulkanRaytracing
             BindAccelerationMemory(topLevelAS, objectMemory.memory);
 
             AccelerationMemory buildScratchMemory = CreateAccelerationScratchBuffer(topLevelAS, VkAccelerationStructureMemoryRequirementsTypeKHR.VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_KHR);
-            
+
             VkAccelerationStructureInstanceKHR[] instances = new VkAccelerationStructureInstanceKHR[]
             {
                     new VkAccelerationStructureInstanceKHR()
