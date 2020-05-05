@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using WaveEngine.Bindings.Vulkan;
 
 namespace HelloTriangle
@@ -35,8 +36,12 @@ namespace HelloTriangle
             }
         }
 
-        private bool IsPhysicalDeviceSuitable(VkPhysicalDevice device)
+        private bool IsPhysicalDeviceSuitable(VkPhysicalDevice physicalDevice)
         {
+            QueueFamilyIndices indices = this.FindQueueFamilies(physicalDevice);
+
+            bool extensionsSupported = this.CheckPhysicalDeviceExtensionSupport(physicalDevice);
+
             // acquire Raytracing features
             VkPhysicalDeviceRayTracingFeaturesKHR rayTracingFeatures = new VkPhysicalDeviceRayTracingFeaturesKHR()
             {
@@ -49,18 +54,47 @@ namespace HelloTriangle
                 sType = VkStructureType.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
                 pNext = &rayTracingFeatures,
             };
-            VulkanNative.vkGetPhysicalDeviceFeatures2(device, &deviceFeatures2);
+            VulkanNative.vkGetPhysicalDeviceFeatures2(physicalDevice, &deviceFeatures2);
 
-            return rayTracingFeatures.rayTracing;
+            extensionsSupported = extensionsSupported && rayTracingFeatures.rayTracing;
+
+            bool swapChainAdequate = false;
+            if (extensionsSupported)
+            {
+                SwapChainSupportDetails swapChainSupport = this.QuerySwapChainSupport(physicalDevice);
+                swapChainAdequate = (swapChainSupport.formats.Length != 0 && swapChainSupport.presentModes.Length != 0);
+            }
+
+            return indices.IsComplete() && extensionsSupported && swapChainAdequate;
+        }
+
+        private bool CheckPhysicalDeviceExtensionSupport(VkPhysicalDevice physicalDevice)
+        {
+            uint extensionCount;
+            Helpers.CheckErrors(VulkanNative.vkEnumerateDeviceExtensionProperties(physicalDevice, null, &extensionCount, null));
+
+            VkExtensionProperties* availableExtensions = stackalloc VkExtensionProperties[(int)extensionCount];
+            Helpers.CheckErrors(VulkanNative.vkEnumerateDeviceExtensionProperties(physicalDevice, null, &extensionCount, availableExtensions));
+
+            HashSet<string> requiredExtensions = new HashSet<string>(deviceExtensions);
+
+            for(int i = 0; i < extensionCount; i++)
+            {
+                var extension = availableExtensions[i];
+                requiredExtensions.Remove(Helpers.GetString(extension.extensionName));
+            }
+
+            return requiredExtensions.Count == 0;
         }
 
         public struct QueueFamilyIndices
         {
             public uint? graphicsFamily;
+            public uint? presentFamily;
 
             public bool IsComplete()
             {
-                return graphicsFamily.HasValue;
+                return graphicsFamily.HasValue && presentFamily.HasValue;
             }
         }
 
@@ -78,8 +112,16 @@ namespace HelloTriangle
             {
                 var queueFamily = queueFamilies[i];
                 if ((queueFamily.queueFlags & VkQueueFlagBits.VK_QUEUE_GRAPHICS_BIT) == 0)
-                {
+                {                    
                     indices.graphicsFamily = i;
+                }
+
+                VkBool32 presentSupport = false;
+                Helpers.CheckErrors(VulkanNative.vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, surface, &presentSupport));
+
+                if (presentSupport)
+                {
+                    indices.presentFamily = i;
                 }
 
                 if (indices.IsComplete())

@@ -14,6 +14,7 @@ namespace HelloTriangle
         string[] extensions = new[]
         {
             "VK_KHR_surface",
+            "VK_KHR_win32_surface",
             "VK_EXT_debug_utils",
         };
 
