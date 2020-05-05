@@ -11,7 +11,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "VKDrawTriangle", "VKDrawTri
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "VKRaytracingTriangle", "VKRaytracingTriangle\VKRaytracingTriangle.csproj", "{7A48ECBD-445F-4D30-AF03-F32C7FC16FB5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KHRRaytracingTriangle", "KHRRaytracingTriangle\KHRRaytracingTriangle.csproj", "{9D58B104-6B28-40DA-BEED-8E9F10E18D6A}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KHRRaytracingTriangle", "KHRRaytracingTriangle\KHRRaytracingTriangle.csproj", "{9D58B104-6B28-40DA-BEED-8E9F10E18D6A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HelloTriangle", "HelloTriangle\HelloTriangle.csproj", "{C0490119-F33F-4FDD-93AE-80490BA807A1}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -39,6 +41,10 @@ Global
 		{9D58B104-6B28-40DA-BEED-8E9F10E18D6A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9D58B104-6B28-40DA-BEED-8E9F10E18D6A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9D58B104-6B28-40DA-BEED-8E9F10E18D6A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C0490119-F33F-4FDD-93AE-80490BA807A1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C0490119-F33F-4FDD-93AE-80490BA807A1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C0490119-F33F-4FDD-93AE-80490BA807A1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C0490119-F33F-4FDD-93AE-80490BA807A1}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

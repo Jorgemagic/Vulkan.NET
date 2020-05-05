@@ -15,7 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\WaveEngine.Bindings.Vulkan\WaveEngine.Bindings.Vulkan.csproj" />
+    <PackageReference Include="Vortice.Vulkan" Version="1.2.137-beta" />
   </ItemGroup>
 
   <ItemGroup>

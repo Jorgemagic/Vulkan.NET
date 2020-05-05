@@ -1,8 +1,8 @@
 ﻿using System;
 using System.Diagnostics;
-using Vortice.Vulkan;
+using WaveEngine.Bindings.Vulkan;
 
-namespace KHRRaytracingTriangle
+namespace HelloTriangle
 {
     public unsafe static class Helpers
     {
@@ -35,7 +35,7 @@ namespace KHRRaytracingTriangle
         [Conditional("DEBUG")]
         public static void CheckErrors(VkResult result)
         {
-            if (result != VkResult.Success)
+            if (result != VkResult.VK_SUCCESS)
             {
                 throw new InvalidOperationException(result.ToString());
             }

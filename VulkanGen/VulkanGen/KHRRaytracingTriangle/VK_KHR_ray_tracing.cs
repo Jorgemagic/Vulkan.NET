@@ -7,7 +7,8 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Forms;
-using WaveEngine.Bindings.Vulkan;
+using Vortice.Mathematics;
+using Vortice.Vulkan;
 
 namespace KHRRaytracingTriangle
 {
@@ -40,7 +41,7 @@ namespace KHRRaytracingTriangle
         //#include <iostream>
         //#include <vector>
 
-        //#define VulkanNative.r)                                                                    \
+        //#define Vulkan.r)                                                                    \
         //    {                                                                                          \
         //        VkResult result = (r);                                                                 \
         //        if (result != VK_SUCCESS) {                                                            \
@@ -92,7 +93,7 @@ namespace KHRRaytracingTriangle
         {
             public VkBuffer buffer;
             public VkDeviceMemory memory;
-            public ulong memoryAddress;
+            public IntPtr memoryAddress;
             public IntPtr mappedPointer;
         };
 
@@ -127,13 +128,13 @@ namespace KHRRaytracingTriangle
         uint shaderBindingTableGroupCount = 3;
 
         VkAccelerationStructureKHR bottomLevelAS;
-        ulong bottomLevelASHandle = 0;
+        IntPtr bottomLevelASHandle = IntPtr.Zero;
         VkAccelerationStructureKHR topLevelAS;
-        ulong topLevelASHandle = 0;
+        IntPtr topLevelASHandle = IntPtr.Zero;
 
         uint desiredWindowWidth = 624;
         uint desiredWindowHeight = 441;
-        VkFormat desiredSurfaceFormat = VkFormat.VK_FORMAT_B8G8R8A8_UNORM;
+        VkFormat desiredSurfaceFormat = VkFormat.B8G8R8A8UNorm;
 
         Form window;
         //HINSTANCE windowInstance;
@@ -190,19 +191,19 @@ namespace KHRRaytracingTriangle
 
             fixed (byte* sourcePointer = code)
             {
-                shaderModuleInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+                shaderModuleInfo.sType = VkStructureType.ShaderModuleCreateInfo;
                 shaderModuleInfo.pNext = null;
                 shaderModuleInfo.codeSize = (UIntPtr)code.Length;
                 shaderModuleInfo.pCode = (uint*)sourcePointer;
-                VulkanNative.vkCreateShaderModule(device, &shaderModuleInfo, null, &shaderModule);
+                Vulkan.vkCreateShaderModule(device, &shaderModuleInfo, null, out shaderModule);
             }
             return shaderModule;
         }
 
-        uint FindMemoryType(uint typeFilter, VkMemoryPropertyFlagBits properties)
+        uint FindMemoryType(uint typeFilter, VkMemoryPropertyFlags properties)
         {
             VkPhysicalDeviceMemoryProperties memProperties;
-            VulkanNative.vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
+            Vulkan.vkGetPhysicalDeviceMemoryProperties(physicalDevice, out memProperties);
             for (int ii = 0; ii < memProperties.memoryTypeCount; ++ii)
             {
                 if (((typeFilter & (1 << ii)) != 0) &&
@@ -214,17 +215,17 @@ namespace KHRRaytracingTriangle
             throw new Exception("failed to find suitable memory type!");
         }
 
-        ulong GetBufferAddress(VkBuffer buffer)
+        IntPtr GetBufferAddress(VkBuffer buffer)
         {
             //PFN_vkGetBufferDeviceAddressKHR vkGetBufferDeviceAddressKHR = null;
             //RESOLVE_VK_DEVICE_PFN(device, vkGetBufferDeviceAddressKHR);
 
             VkBufferDeviceAddressInfo bufferAddressInfo = default;
-            bufferAddressInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+            bufferAddressInfo.sType = VkStructureType.BufferDeviceAddressInfo;
             bufferAddressInfo.pNext = null;
             bufferAddressInfo.buffer = buffer;
 
-            return VulkanNative.vkGetBufferDeviceAddress(device, &bufferAddressInfo);
+            return Vulkan.vkGetBufferDeviceAddress(device, &bufferAddressInfo);
         }
 
         MappedBuffer CreateMappedBuffer<T>(T[] srcData, uint byteLength)
@@ -232,46 +233,46 @@ namespace KHRRaytracingTriangle
             MappedBuffer outValue = default;
 
             VkBufferCreateInfo bufferInfo = default;
-            bufferInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+            bufferInfo.sType = VkStructureType.BufferCreateInfo;
             bufferInfo.pNext = null;
             bufferInfo.size = byteLength;
-            bufferInfo.usage = VkBufferUsageFlagBits.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-            bufferInfo.sharingMode = VkSharingMode.VK_SHARING_MODE_EXCLUSIVE;
+            bufferInfo.usage = VkBufferUsageFlags.ShaderDeviceAddressKHR;
+            bufferInfo.sharingMode = VkSharingMode.Exclusive;
             bufferInfo.queueFamilyIndexCount = 0;
             bufferInfo.pQueueFamilyIndices = null;
-            VulkanNative.vkCreateBuffer(device, &bufferInfo, null, &outValue.buffer);
+            Vulkan.vkCreateBuffer(device, &bufferInfo, null, out outValue.buffer);
 
             VkMemoryRequirements memoryRequirements = default;
-            VulkanNative.vkGetBufferMemoryRequirements(device, outValue.buffer, &memoryRequirements);
+            Vulkan.vkGetBufferMemoryRequirements(device, outValue.buffer, out memoryRequirements);
 
             VkMemoryAllocateFlagsInfo memAllocFlagsInfo = default;
-            memAllocFlagsInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+            memAllocFlagsInfo.sType = VkStructureType.MemoryAllocateFlagsInfo;
             memAllocFlagsInfo.pNext = null;
-            memAllocFlagsInfo.flags = VkMemoryAllocateFlagBits.VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+            memAllocFlagsInfo.flags = VkMemoryAllocateFlags.DeviceAddressKHR;
             memAllocFlagsInfo.deviceMask = 0;
 
             VkMemoryAllocateInfo memAllocInfo = default;
-            memAllocInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+            memAllocInfo.sType = VkStructureType.MemoryAllocateInfo;
             memAllocInfo.pNext = &memAllocFlagsInfo;
             memAllocInfo.allocationSize = memoryRequirements.size;
             memAllocInfo.memoryTypeIndex =
                 FindMemoryType(memoryRequirements.memoryTypeBits,
-                               VkMemoryPropertyFlagBits.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VkMemoryPropertyFlagBits.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-            VulkanNative.vkAllocateMemory(device, &memAllocInfo, null, &outValue.memory);
+                               VkMemoryPropertyFlags.HostVisible | VkMemoryPropertyFlags.HostCoherent);
+            Vulkan.vkAllocateMemory(device, &memAllocInfo, null, &outValue.memory);
 
-            VulkanNative.vkBindBufferMemory(device, outValue.buffer, outValue.memory, 0);
+            Vulkan.vkBindBufferMemory(device, outValue.buffer, outValue.memory, 0);
 
             outValue.memoryAddress = GetBufferAddress(outValue.buffer);
 
             IntPtr dstData;
-            VulkanNative.vkMapMemory(device, outValue.memory, 0, byteLength, 0, (void**)&dstData);
+            Vulkan.vkMapMemory(device, outValue.memory, 0, byteLength, 0, (void**)&dstData);
             if (srcData != null)
             {
                 GCHandle gcHandle = GCHandle.Alloc(srcData, GCHandleType.Pinned);
                 Unsafe.CopyBlock((void*)dstData, (void*)gcHandle.AddrOfPinnedObject(), byteLength);
                 gcHandle.Free();
             }
-            VulkanNative.vkUnmapMemory(device, outValue.memory);
+            Vulkan.vkUnmapMemory(device, outValue.memory);
             outValue.mappedPointer = dstData;
 
             return outValue;
@@ -282,7 +283,7 @@ namespace KHRRaytracingTriangle
             VkAccelerationStructureMemoryRequirementsTypeKHR type)
         {
             VkMemoryRequirements2 memoryRequirements2 = default;
-            memoryRequirements2.sType = VkStructureType.VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
+            memoryRequirements2.sType = VkStructureType.MemoryRequirements2;
 
             //PFN_vkGetAccelerationStructureMemoryRequirementsKHR
             //    vkGetAccelerationStructureMemoryRequirementsKHR = null;
@@ -290,12 +291,12 @@ namespace KHRRaytracingTriangle
 
             VkAccelerationStructureMemoryRequirementsInfoKHR accelerationMemoryRequirements = default;
             accelerationMemoryRequirements.sType =
-                 VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_KHR;
+                 VkStructureType.AccelerationStructureMemoryRequirementsInfoKHR;
             accelerationMemoryRequirements.pNext = null;
             accelerationMemoryRequirements.type = type;
-            accelerationMemoryRequirements.buildType = VkAccelerationStructureBuildTypeKHR.VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR;
+            accelerationMemoryRequirements.buildType = VkAccelerationStructureBuildTypeKHR.DeviceKHR;
             accelerationMemoryRequirements.accelerationStructure = acceleration;
-            VulkanNative.vkGetAccelerationStructureMemoryRequirementsKHR(device, &accelerationMemoryRequirements,
+            Vulkan.vkGetAccelerationStructureMemoryRequirementsKHR(device, &accelerationMemoryRequirements,
                                                             &memoryRequirements2);
 
             return memoryRequirements2.memoryRequirements;
@@ -308,7 +309,7 @@ namespace KHRRaytracingTriangle
 
             VkBindAccelerationStructureMemoryInfoKHR accelerationMemoryBindInfo = default;
             accelerationMemoryBindInfo.sType =
-                VkStructureType.VK_STRUCTURE_TYPE_BIND_ACCELERATION_STRUCTURE_MEMORY_INFO_KHR;
+                VkStructureType.BindAccelerationStructureMemoryInfoKHR;
             accelerationMemoryBindInfo.pNext = null;
             accelerationMemoryBindInfo.accelerationStructure = acceleration;
             accelerationMemoryBindInfo.memory = memory;
@@ -316,7 +317,7 @@ namespace KHRRaytracingTriangle
             accelerationMemoryBindInfo.deviceIndexCount = 0;
             accelerationMemoryBindInfo.pDeviceIndices = null;
 
-            VulkanNative.vkBindAccelerationStructureMemoryKHR(device, 1, &accelerationMemoryBindInfo);
+            Vulkan.vkBindAccelerationStructureMemoryKHR(device, 1, &accelerationMemoryBindInfo);
         }
 
         MappedBuffer CreateAccelerationScratchBuffer(
@@ -329,18 +330,18 @@ namespace KHRRaytracingTriangle
                 GetAccelerationStructureMemoryRequirements(acceleration, type);
 
             VkBufferCreateInfo bufferInfo = default;
-            bufferInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+            bufferInfo.sType = VkStructureType.BufferCreateInfo;
             bufferInfo.pNext = null;
             bufferInfo.size = asRequirements.size;
             bufferInfo.usage =
-                VkBufferUsageFlagBits.VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR | VkBufferUsageFlagBits.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-            bufferInfo.sharingMode = VkSharingMode.VK_SHARING_MODE_EXCLUSIVE;
+                VkBufferUsageFlags.RayTracingKHR | VkBufferUsageFlags.ShaderDeviceAddressKHR;
+            bufferInfo.sharingMode = VkSharingMode.Exclusive;
             bufferInfo.queueFamilyIndexCount = 0;
             bufferInfo.pQueueFamilyIndices = null;
-            VulkanNative.vkCreateBuffer(device, &bufferInfo, null, &outValue.buffer);
+            Vulkan.vkCreateBuffer(device, &bufferInfo, null, out outValue.buffer);
 
             VkMemoryRequirements bufRequirements = default;
-            VulkanNative.vkGetBufferMemoryRequirements(device, outValue.buffer, &bufRequirements);
+            Vulkan.vkGetBufferMemoryRequirements(device, outValue.buffer, out bufRequirements);
 
             // buffer requirements can differ to AS requirements, so we max them
             ulong alloctionSize =
@@ -349,20 +350,20 @@ namespace KHRRaytracingTriangle
             uint allocationMemoryBits = bufRequirements.memoryTypeBits | asRequirements.memoryTypeBits;
 
             VkMemoryAllocateFlagsInfo memAllocFlagsInfo = default;
-            memAllocFlagsInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+            memAllocFlagsInfo.sType = VkStructureType.MemoryAllocateFlagsInfo;
             memAllocFlagsInfo.pNext = null;
-            memAllocFlagsInfo.flags = VkMemoryAllocateFlagBits.VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+            memAllocFlagsInfo.flags = VkMemoryAllocateFlags.DeviceAddressKHR;
             memAllocFlagsInfo.deviceMask = 0;
 
             VkMemoryAllocateInfo memAllocInfo = default;
-            memAllocInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+            memAllocInfo.sType = VkStructureType.MemoryAllocateInfo;
             memAllocInfo.pNext = &memAllocFlagsInfo;
             memAllocInfo.allocationSize = alloctionSize;
             memAllocInfo.memoryTypeIndex =
-                FindMemoryType(allocationMemoryBits, VkMemoryPropertyFlagBits.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-            VulkanNative.vkAllocateMemory(device, &memAllocInfo, null, &outValue.memory);
+                FindMemoryType(allocationMemoryBits, VkMemoryPropertyFlags.DeviceLocal);
+            Vulkan.vkAllocateMemory(device, &memAllocInfo, null, &outValue.memory);
 
-            VulkanNative.vkBindBufferMemory(device, outValue.buffer, outValue.memory, 0);
+            Vulkan.vkBindBufferMemory(device, outValue.buffer, outValue.memory, 0);
 
             outValue.memoryAddress = GetBufferAddress(outValue.buffer);
 
@@ -371,26 +372,26 @@ namespace KHRRaytracingTriangle
 
         void InsertCommandImageBarrier(VkCommandBuffer commandBuffer,
                                        VkImage image,
-                                       VkAccessFlagBits srcAccessMask,
-                                       VkAccessFlagBits dstAccessMask,
+                                       VkAccessFlags srcAccessMask,
+                                       VkAccessFlags dstAccessMask,
                                        VkImageLayout oldLayout,
                                        VkImageLayout newLayout,
                                         VkImageSubresourceRange subresourceRange)
         {
             VkImageMemoryBarrier imageMemoryBarrier = default;
-            imageMemoryBarrier.sType = VkStructureType.VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            imageMemoryBarrier.sType = VkStructureType.ImageMemoryBarrier;
             imageMemoryBarrier.pNext = null;
             imageMemoryBarrier.srcAccessMask = srcAccessMask;
             imageMemoryBarrier.dstAccessMask = dstAccessMask;
             imageMemoryBarrier.oldLayout = oldLayout;
             imageMemoryBarrier.newLayout = newLayout;
-            imageMemoryBarrier.srcQueueFamilyIndex = VulkanNative.VK_QUEUE_FAMILY_IGNORED;
-            imageMemoryBarrier.dstQueueFamilyIndex = VulkanNative.VK_QUEUE_FAMILY_IGNORED;
+            imageMemoryBarrier.srcQueueFamilyIndex = Vulkan.QueueFamilyIgnored;
+            imageMemoryBarrier.dstQueueFamilyIndex = Vulkan.QueueFamilyIgnored;
             imageMemoryBarrier.image = image;
             imageMemoryBarrier.subresourceRange = subresourceRange;
 
-            VulkanNative.vkCmdPipelineBarrier(commandBuffer, VkPipelineStageFlagBits.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                                 VkPipelineStageFlagBits.VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, null, 0, null, 1,
+            Vulkan.vkCmdPipelineBarrier(commandBuffer, VkPipelineStageFlags.AllCommands,
+                                 VkPipelineStageFlags.AllCommands, 0, 0, null, 0, null, 1,
                                  &imageMemoryBarrier);
         }
 
@@ -409,10 +410,10 @@ namespace KHRRaytracingTriangle
 
         bool IsValidationLayerAvailable(string layerName)
         {
-            uint propertyCount = 0;
-            VulkanNative.vkEnumerateInstanceLayerProperties(&propertyCount, null);
+            /*uint propertyCount = 0;
+            Vulkan.vkEnumerateInstanceLayerProperties(&propertyCount, null);
             VkLayerProperties* properties = stackalloc VkLayerProperties[(int)propertyCount];
-            var result = VulkanNative.vkEnumerateInstanceLayerProperties(&propertyCount, properties);
+            var result = Vulkan.vkEnumerateInstanceLayerProperties(&propertyCount, properties);
             Helpers.CheckErrors(result);
 
             // loop through all toggled layers and check if we can enable each
@@ -423,7 +424,8 @@ namespace KHRRaytracingTriangle
                     return true;
             }
 
-            return false;
+            return false;*/
+            return true;
         }
 
         public int Main()
@@ -507,6 +509,8 @@ namespace KHRRaytracingTriangle
             window.FormBorderStyle = FormBorderStyle.FixedToolWindow;
             window.Show();
 
+            Vulkan.vkInitialize();
+
             // check which validation layers are available
             List<string> availableValidationLayers = new List<string>();
             for (uint ii = 0; ii < validationLayers.Length; ++ii)
@@ -522,13 +526,13 @@ namespace KHRRaytracingTriangle
             };
 
             VkApplicationInfo appInfo = default;
-            appInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_APPLICATION_INFO;
+            appInfo.sType = VkStructureType.ApplicationInfo;
             appInfo.pNext = null;
             appInfo.pApplicationName = "Hello Triangle".ToPointer();
-            appInfo.applicationVersion = Helpers.Version(1, 0, 0);
+            appInfo.applicationVersion = new VkVersion(1, 0, 0);
             appInfo.pEngineName = "No Engine".ToPointer();
-            appInfo.engineVersion = Helpers.Version(1, 0, 0);
-            appInfo.apiVersion = Helpers.Version(1, 2, 0);
+            appInfo.engineVersion = new VkVersion(1, 0, 0);
+            appInfo.apiVersion = new VkVersion(1, 2, 0);
 
             int layersCount = availableValidationLayers.Count;
             IntPtr* layersToEnableArray = stackalloc IntPtr[layersCount];
@@ -547,21 +551,19 @@ namespace KHRRaytracingTriangle
             }
 
             VkInstanceCreateInfo createInfo = default;
-            createInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+            createInfo.sType = VkStructureType.InstanceCreateInfo;
             createInfo.pNext = null;
             createInfo.pApplicationInfo = &appInfo;
             createInfo.enabledExtensionCount = (uint)instanceExtensions.Length;
             createInfo.ppEnabledExtensionNames = (byte**)extensionsToEnableArray;
             createInfo.enabledLayerCount = (uint)availableValidationLayers.Count;
             createInfo.ppEnabledLayerNames = (byte**)layersToEnableArray;
-
-            fixed (VkInstance* instancePtr = &instance)
-            {
-                VulkanNative.vkCreateInstance(&createInfo, null, instancePtr);
-            }
+            
+            Helpers.CheckErrors(Vulkan.vkCreateInstance(&createInfo, null, out instance));
+            Vulkan.vkLoadInstance(instance);
 
             uint deviceCount = 0;
-            VulkanNative.vkEnumeratePhysicalDevices(instance, &deviceCount, null);
+            Vulkan.vkEnumeratePhysicalDevices(instance, &deviceCount, null);
             if (deviceCount <= 0)
             {
                 Debug.WriteLine($"No physical devices available");
@@ -570,7 +572,7 @@ namespace KHRRaytracingTriangle
             VkPhysicalDevice[] devices = new VkPhysicalDevice[deviceCount];
             fixed (VkPhysicalDevice* devicesPtr = devices)
             {
-                VulkanNative.vkEnumeratePhysicalDevices(instance, &deviceCount, devicesPtr);
+                Vulkan.vkEnumeratePhysicalDevices(instance, &deviceCount, devicesPtr);
             }
 
             // find RT compatible device
@@ -578,13 +580,13 @@ namespace KHRRaytracingTriangle
             {
                 // acquire RT features
                 VkPhysicalDeviceRayTracingFeaturesKHR rayTracingFeatures = default;
-                rayTracingFeatures.sType = VkStructureType.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_FEATURES_KHR;
+                rayTracingFeatures.sType = VkStructureType.PhysicalDeviceRayTracingFeaturesKHR;
                 rayTracingFeatures.pNext = null;
 
                 VkPhysicalDeviceFeatures2 deviceFeatures2 = default;
-                deviceFeatures2.sType = VkStructureType.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+                deviceFeatures2.sType = VkStructureType.PhysicalDeviceFeatures2;
                 deviceFeatures2.pNext = &rayTracingFeatures;
-                VulkanNative.vkGetPhysicalDeviceFeatures2(devices[ii], &deviceFeatures2);
+                Vulkan.vkGetPhysicalDeviceFeatures2(devices[ii], out deviceFeatures2);
 
                 if (rayTracingFeatures.rayTracing == true)
                 {
@@ -599,25 +601,25 @@ namespace KHRRaytracingTriangle
             }
 
             VkPhysicalDeviceProperties deviceProperties = default;
-            VulkanNative.vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
+            Vulkan.vkGetPhysicalDeviceProperties(physicalDevice, out deviceProperties);
             Debug.WriteLine($"GPU: {Helpers.GetString(deviceProperties.deviceName)}");
 
             float queuePriority = 0.0f;
 
             VkDeviceQueueCreateInfo deviceQueueInfo = default;
-            deviceQueueInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+            deviceQueueInfo.sType = VkStructureType.DeviceQueueCreateInfo;
             deviceQueueInfo.pNext = null;
             deviceQueueInfo.queueFamilyIndex = 0;
             deviceQueueInfo.queueCount = 1;
             deviceQueueInfo.pQueuePriorities = &queuePriority;
 
             VkPhysicalDeviceRayTracingFeaturesKHR deviceRayTracingFeatures = default;
-            deviceRayTracingFeatures.sType = VkStructureType.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_FEATURES_KHR;
+            deviceRayTracingFeatures.sType = VkStructureType.PhysicalDeviceRayTracingFeaturesKHR;
             deviceRayTracingFeatures.pNext = null;
             deviceRayTracingFeatures.rayTracing = true;
 
             VkPhysicalDeviceVulkan12Features deviceVulkan12Features = default;
-            deviceVulkan12Features.sType = VkStructureType.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+            deviceVulkan12Features.sType = VkStructureType.PhysicalDeviceVulkan12Features;
             deviceVulkan12Features.pNext = &deviceRayTracingFeatures;
             deviceVulkan12Features.bufferDeviceAddress = true;
 
@@ -630,7 +632,7 @@ namespace KHRRaytracingTriangle
             }
 
             VkDeviceCreateInfo deviceInfo = default;
-            deviceInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+            deviceInfo.sType = VkStructureType.DeviceCreateInfo;
             deviceInfo.pNext = &deviceVulkan12Features;
             deviceInfo.queueCreateInfoCount = 1;
             deviceInfo.pQueueCreateInfos = &deviceQueueInfo;
@@ -638,15 +640,10 @@ namespace KHRRaytracingTriangle
             deviceInfo.ppEnabledExtensionNames = (byte**)deviceExtensionsArray;
             deviceInfo.pEnabledFeatures = null;
 
-            fixed (VkDevice* devicePtr = &device)
-            {
-                VulkanNative.vkCreateDevice(physicalDevice, &deviceInfo, null, devicePtr);
-            }
 
-            fixed (VkQueue* queuePtr = &queue)
-            {
-                VulkanNative.vkGetDeviceQueue(device, 0, 0, queuePtr);
-            }
+            Vulkan.vkCreateDevice(physicalDevice, &deviceInfo, null, out device);
+
+            Vulkan.vkGetDeviceQueue(device, 0, 0, out queue);
 
             // clang-format off
             //RESOLVE_VK_INSTANCE_PFN(instance, vkGetPhysicalDeviceSurfaceSupportKHR);
@@ -664,19 +661,17 @@ namespace KHRRaytracingTriangle
             // clang-format on
 
             VkWin32SurfaceCreateInfoKHR surfaceCreateInfo;
-            surfaceCreateInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+            surfaceCreateInfo.sType = VkStructureType.Win32SurfaceCreateInfoKHR;
             surfaceCreateInfo.pNext = null;
             surfaceCreateInfo.flags = 0;
             surfaceCreateInfo.hinstance = Process.GetCurrentProcess().Handle;
             surfaceCreateInfo.hwnd = window.Handle;
 
-            fixed (VkSurfaceKHR* surfacePtr = &surface)
-            {
-                VulkanNative.vkCreateWin32SurfaceKHR(instance, &surfaceCreateInfo, null, surfacePtr);
-            }
+
+            Vulkan.vkCreateWin32SurfaceKHR(instance, &surfaceCreateInfo, null, out surface);
 
             VkBool32 surfaceSupport = false;
-            VulkanNative.vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, 0, surface, &surfaceSupport);
+            Vulkan.vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, 0, surface, out surfaceSupport);
             if (!surfaceSupport)
             {
                 Debug.WriteLine($"No surface rendering support");
@@ -684,25 +679,22 @@ namespace KHRRaytracingTriangle
             }
 
             VkCommandPoolCreateInfo cmdPoolInfo = default;
-            cmdPoolInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+            cmdPoolInfo.sType = VkStructureType.CommandPoolCreateInfo;
             cmdPoolInfo.pNext = null;
             cmdPoolInfo.flags = 0;
             cmdPoolInfo.queueFamilyIndex = 0;
 
-            fixed (VkCommandPool* commandPoolPtr = &commandPool)
-            {
-                VulkanNative.vkCreateCommandPool(device, &cmdPoolInfo, null, commandPoolPtr);
-            }
+            Vulkan.vkCreateCommandPool(device, &cmdPoolInfo, null, out commandPool);
 
             // acquire RT properties
             VkPhysicalDeviceRayTracingPropertiesKHR rayTracingProperties = default;
-            rayTracingProperties.sType = VkStructureType.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PROPERTIES_KHR;
+            rayTracingProperties.sType = VkStructureType.PhysicalDeviceRayTracingPropertiesKHR;
             rayTracingProperties.pNext = null;
 
             VkPhysicalDeviceProperties2 deviceProperties2 = default;
-            deviceProperties2.sType = VkStructureType.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+            deviceProperties2.sType = VkStructureType.PhysicalDeviceProperties2;
             deviceProperties2.pNext = &rayTracingProperties;
-            VulkanNative.vkGetPhysicalDeviceProperties2(physicalDevice, &deviceProperties2);
+            Vulkan.vkGetPhysicalDeviceProperties2(physicalDevice, out deviceProperties2);
 
             // create bottom-level container
             {
@@ -710,43 +702,43 @@ namespace KHRRaytracingTriangle
 
                 VkAccelerationStructureCreateGeometryTypeInfoKHR accelerationCreateGeometryInfo = default;
                 accelerationCreateGeometryInfo.sType =
-                    VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_GEOMETRY_TYPE_INFO_KHR;
+                    VkStructureType.AccelerationStructureCreateGeometryTypeInfoKHR;
                 accelerationCreateGeometryInfo.pNext = null;
-                accelerationCreateGeometryInfo.geometryType = VkGeometryTypeKHR.VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+                accelerationCreateGeometryInfo.geometryType = VkGeometryTypeKHR.TrianglesKHR;
                 accelerationCreateGeometryInfo.maxPrimitiveCount = 128;
-                accelerationCreateGeometryInfo.indexType = VkIndexType.VK_INDEX_TYPE_UINT32;
+                accelerationCreateGeometryInfo.indexType = VkIndexType.Uint32;
                 accelerationCreateGeometryInfo.maxVertexCount = 8;
-                accelerationCreateGeometryInfo.vertexFormat = VkFormat.VK_FORMAT_R32G32B32_SFLOAT;
+                accelerationCreateGeometryInfo.vertexFormat = VkFormat.R32G32B32SFloat;
                 accelerationCreateGeometryInfo.allowsTransforms = false;
 
                 VkAccelerationStructureCreateInfoKHR accelerationInfo = default;
-                accelerationInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+                accelerationInfo.sType = VkStructureType.AccelerationStructureCreateInfoKHR;
                 accelerationInfo.pNext = null;
                 accelerationInfo.compactedSize = 0;
-                accelerationInfo.type = VkAccelerationStructureTypeKHR.VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-                accelerationInfo.flags = VkBuildAccelerationStructureFlagBitsKHR.VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+                accelerationInfo.type = VkAccelerationStructureTypeKHR.BottomLevelKHR;
+                accelerationInfo.flags = VkBuildAccelerationStructureFlagsKHR.PreferFastTraceKHR;
                 accelerationInfo.maxGeometryCount = 1;
                 accelerationInfo.pGeometryInfos = &accelerationCreateGeometryInfo;
-                accelerationInfo.deviceAddress = 0;
+                accelerationInfo.deviceAddress = IntPtr.Zero;
 
                 fixed (VkAccelerationStructureKHR* bottomLevelASPtr = &bottomLevelAS)
                 {
-                    VulkanNative.vkCreateAccelerationStructureKHR(device, &accelerationInfo, null, bottomLevelASPtr);
+                    Vulkan.vkCreateAccelerationStructureKHR(device, &accelerationInfo, null, bottomLevelASPtr);
                 }
 
                 MappedBuffer objectMemory = CreateAccelerationScratchBuffer(
-                    bottomLevelAS, VkAccelerationStructureMemoryRequirementsTypeKHR.VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_OBJECT_KHR);
+                    bottomLevelAS, VkAccelerationStructureMemoryRequirementsTypeKHR.ObjectKHR);
 
                 BindAccelerationMemory(bottomLevelAS, objectMemory.memory);
 
                 MappedBuffer buildScratchMemory = CreateAccelerationScratchBuffer(
-                    bottomLevelAS, VkAccelerationStructureMemoryRequirementsTypeKHR.VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_KHR);
+                    bottomLevelAS, VkAccelerationStructureMemoryRequirementsTypeKHR.BuildScratchKHR);
 
                 // Get bottom level acceleration structure handle for use in top level instances
                 VkAccelerationStructureDeviceAddressInfoKHR devAddrInfo = default;
-                devAddrInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
+                devAddrInfo.sType = VkStructureType.AccelerationStructureDeviceAddressInfoKHR;
                 devAddrInfo.accelerationStructure = bottomLevelAS;
-                bottomLevelASHandle = VulkanNative.vkGetAccelerationStructureDeviceAddressKHR(device, &devAddrInfo);
+                bottomLevelASHandle = Vulkan.vkGetAccelerationStructureDeviceAddressKHR(device, &devAddrInfo);
 
                 // clang-format off
                 float[] vertices = {
@@ -764,33 +756,33 @@ namespace KHRRaytracingTriangle
                     CreateMappedBuffer(indices, (uint)(sizeof(uint) * indices.Length));
 
                 VkAccelerationStructureGeometryKHR accelerationGeometry = default;
-                accelerationGeometry.sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+                accelerationGeometry.sType = VkStructureType.AccelerationStructureGeometryKHR;
                 accelerationGeometry.pNext = null;
-                accelerationGeometry.flags = VkGeometryFlagBitsKHR.VK_GEOMETRY_OPAQUE_BIT_KHR;
-                accelerationGeometry.geometryType = VkGeometryTypeKHR.VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+                accelerationGeometry.flags = VkGeometryFlagsKHR.OpaqueKHR;
+                accelerationGeometry.geometryType = VkGeometryTypeKHR.TrianglesKHR;
                 accelerationGeometry.geometry = default;
                 accelerationGeometry.geometry.triangles = default;
                 accelerationGeometry.geometry.triangles.sType =
-                     VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+                     VkStructureType.AccelerationStructureGeometryTrianglesDataKHR;
                 accelerationGeometry.geometry.triangles.pNext = null;
-                accelerationGeometry.geometry.triangles.vertexFormat = VkFormat.VK_FORMAT_R32G32B32_SFLOAT;
+                accelerationGeometry.geometry.triangles.vertexFormat = VkFormat.R32G32B32SFloat;
                 accelerationGeometry.geometry.triangles.vertexData.deviceAddress =
                     vertexBuffer.memoryAddress;
                 accelerationGeometry.geometry.triangles.vertexStride = 3 * sizeof(float);
-                accelerationGeometry.geometry.triangles.indexType = VkIndexType.VK_INDEX_TYPE_UINT32;
+                accelerationGeometry.geometry.triangles.indexType = VkIndexType.Uint32;
                 accelerationGeometry.geometry.triangles.indexData.deviceAddress = indexBuffer.memoryAddress;
-                accelerationGeometry.geometry.triangles.transformData.deviceAddress = 0;
+                accelerationGeometry.geometry.triangles.transformData.deviceAddress = IntPtr.Zero;
 
                 VkAccelerationStructureGeometryKHR[] accelerationGeometries = new VkAccelerationStructureGeometryKHR[] { accelerationGeometry };
                 VkAccelerationStructureBuildGeometryInfoKHR accelerationBuildGeometryInfo = default;
                 fixed (VkAccelerationStructureGeometryKHR* ppGeometries = &accelerationGeometries[0])
                 {
                     accelerationBuildGeometryInfo.sType =
-                        VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+                        VkStructureType.AccelerationStructureBuildGeometryInfoKHR;
                     accelerationBuildGeometryInfo.pNext = null;
-                    accelerationBuildGeometryInfo.type = VkAccelerationStructureTypeKHR.VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+                    accelerationBuildGeometryInfo.type = VkAccelerationStructureTypeKHR.BottomLevelKHR;
                     accelerationBuildGeometryInfo.flags =
-                        VkBuildAccelerationStructureFlagBitsKHR.VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+                        VkBuildAccelerationStructureFlagsKHR.PreferFastTraceKHR;
                     accelerationBuildGeometryInfo.update = false;
                     accelerationBuildGeometryInfo.srcAccelerationStructure = 0;
                     accelerationBuildGeometryInfo.dstAccelerationStructure = bottomLevelAS;
@@ -811,48 +803,48 @@ namespace KHRRaytracingTriangle
                 VkCommandBuffer commandBuffer;
 
                 VkCommandBufferAllocateInfo commandBufferAllocateInfo1 = default;
-                commandBufferAllocateInfo1.sType = VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+                commandBufferAllocateInfo1.sType = VkStructureType.CommandBufferAllocateInfo;
                 commandBufferAllocateInfo1.pNext = null;
                 commandBufferAllocateInfo1.commandPool = commandPool;
-                commandBufferAllocateInfo1.level = VkCommandBufferLevel.VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+                commandBufferAllocateInfo1.level = VkCommandBufferLevel.Primary;
                 commandBufferAllocateInfo1.commandBufferCount = 1;
-                VulkanNative.
+                Vulkan.
                     vkAllocateCommandBuffers(device, &commandBufferAllocateInfo1, &commandBuffer);
 
                 VkCommandBufferBeginInfo commandBufferBeginInfo1 = default;
-                commandBufferBeginInfo1.sType = VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+                commandBufferBeginInfo1.sType = VkStructureType.CommandBufferBeginInfo;
                 commandBufferBeginInfo1.pNext = null;
-                commandBufferBeginInfo1.flags = VkCommandBufferUsageFlagBits.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-                VulkanNative.vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo1);
+                commandBufferBeginInfo1.flags = VkCommandBufferUsageFlags.OneTimeSubmit;
+                Vulkan.vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo1);
 
                 fixed (VkAccelerationStructureBuildOffsetInfoKHR** accelerationBuildOffsetsPtr = &accelerationBuildOffsets[0])
                 {
-                    VulkanNative.vkCmdBuildAccelerationStructureKHR(commandBuffer, 1, &accelerationBuildGeometryInfo,
+                    Vulkan.vkCmdBuildAccelerationStructureKHR(commandBuffer, 1, &accelerationBuildGeometryInfo,
                                                        accelerationBuildOffsetsPtr);
                 }
 
-                VulkanNative.vkEndCommandBuffer(commandBuffer);
+                Vulkan.vkEndCommandBuffer(commandBuffer);
 
                 VkSubmitInfo submitInfo = default;
-                submitInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_SUBMIT_INFO;
+                submitInfo.sType = VkStructureType.SubmitInfo;
                 submitInfo.pNext = null;
                 submitInfo.commandBufferCount = 1;
                 submitInfo.pCommandBuffers = &commandBuffer;
 
                 VkFence fence = 0;
                 VkFenceCreateInfo fenceInfo = default;
-                fenceInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+                fenceInfo.sType = VkStructureType.FenceCreateInfo;
                 fenceInfo.pNext = null;
 
-                VulkanNative.vkCreateFence(device, &fenceInfo, null, &fence);
-                VulkanNative.vkQueueSubmit(queue, 1, &submitInfo, fence);
-                VulkanNative.vkWaitForFences(device, 1, &fence, true, ulong.MaxValue);
+                Vulkan.vkCreateFence(device, &fenceInfo, null, out fence);
+                Vulkan.vkQueueSubmit(queue, 1, &submitInfo, fence);
+                Vulkan.vkWaitForFences(device, 1, &fence, true, ulong.MaxValue);
 
-                VulkanNative.vkDestroyFence(device, fence, null);
-                VulkanNative.vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+                Vulkan.vkDestroyFence(device, fence, null);
+                Vulkan.vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 
                 // make sure bottom AS handle is valid
-                if (bottomLevelASHandle == 0)
+                if (bottomLevelASHandle == IntPtr.Zero)
                 {
                     Debug.WriteLine($"Invalid Handle to BLAS");
                     return EXIT_FAILURE;
@@ -865,34 +857,34 @@ namespace KHRRaytracingTriangle
 
                 VkAccelerationStructureCreateGeometryTypeInfoKHR accelerationCreateGeometryInfo = default;
                 accelerationCreateGeometryInfo.sType =
-                    VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_GEOMETRY_TYPE_INFO_KHR;
+                    VkStructureType.AccelerationStructureCreateGeometryTypeInfoKHR;
                 accelerationCreateGeometryInfo.pNext = null;
-                accelerationCreateGeometryInfo.geometryType = VkGeometryTypeKHR.VK_GEOMETRY_TYPE_INSTANCES_KHR;
+                accelerationCreateGeometryInfo.geometryType = VkGeometryTypeKHR.InstancesKHR;
                 accelerationCreateGeometryInfo.maxPrimitiveCount = 1;
 
                 VkAccelerationStructureCreateInfoKHR accelerationInfo = default;
-                accelerationInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+                accelerationInfo.sType = VkStructureType.AccelerationStructureCreateInfoKHR;
                 accelerationInfo.pNext = null;
                 accelerationInfo.compactedSize = 0;
-                accelerationInfo.type = VkAccelerationStructureTypeKHR.VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
-                accelerationInfo.flags = VkBuildAccelerationStructureFlagBitsKHR.VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+                accelerationInfo.type = VkAccelerationStructureTypeKHR.TopLevelKHR;
+                accelerationInfo.flags = VkBuildAccelerationStructureFlagsKHR.PreferFastTraceKHR;
                 accelerationInfo.maxGeometryCount = 1;
                 accelerationInfo.pGeometryInfos = &accelerationCreateGeometryInfo;
-                accelerationInfo.deviceAddress = 0;
+                accelerationInfo.deviceAddress = IntPtr.Zero;
 
                 fixed (VkAccelerationStructureKHR* topLevelASPtr = &topLevelAS)
                 {
-                    VulkanNative.
+                    Vulkan.
                         vkCreateAccelerationStructureKHR(device, &accelerationInfo, null, topLevelASPtr);
                 }
 
                 MappedBuffer objectMemory = CreateAccelerationScratchBuffer(
-                    topLevelAS, VkAccelerationStructureMemoryRequirementsTypeKHR.VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_OBJECT_KHR);
+                    topLevelAS, VkAccelerationStructureMemoryRequirementsTypeKHR.ObjectKHR);
 
                 BindAccelerationMemory(topLevelAS, objectMemory.memory);
 
                 MappedBuffer buildScratchMemory = CreateAccelerationScratchBuffer(
-                    topLevelAS, VkAccelerationStructureMemoryRequirementsTypeKHR.VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_KHR);
+                    topLevelAS, VkAccelerationStructureMemoryRequirementsTypeKHR.BuildScratchKHR);
 
                 VkAccelerationStructureInstanceKHR[] instances = new VkAccelerationStructureInstanceKHR[]
                 {
@@ -903,23 +895,24 @@ namespace KHRRaytracingTriangle
                             matrix_0 = 1.0f,
                             matrix_1 = 0.0f,
                             matrix_2 = 0.0f,
-                            matrix_3 = 0.0f,
 
-                            matrix_4 = 0.0f,
-                            matrix_5 = 1.0f,
-                            matrix_6 = 0.0f,
-                            matrix_7 = 0.0f,
+                            //matrix_3 = 0.0f,
 
-                            matrix_8 = 0.0f,
-                            matrix_9 = 0.0f,
-                            matrix_10 = 1.0f,
-                            matrix_11 = 0.0f,
+                            //matrix_4 = 0.0f,
+                            //matrix_5 = 1.0f,
+                            //matrix_6 = 0.0f,
+                            //matrix_7 = 0.0f,
+
+                            //matrix_8 = 0.0f,
+                            //matrix_9 = 0.0f,
+                            //matrix_10 = 1.0f,
+                            //matrix_11 = 0.0f,
                         },
                         instanceCustomIndex = 0,
                         mask = 0xff,
                         instanceShaderBindingTableRecordOffset = 0x0,
-                        flags = VkGeometryInstanceFlagBitsKHR.VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR,
-                        accelerationStructureReference = bottomLevelASHandle,
+                        flags = VkGeometryInstanceFlagsKHR.TriangleFacingCullDisableKHR,
+                        accelerationStructureReference = (ulong)bottomLevelASHandle,
                     }
                 };
 
@@ -927,14 +920,14 @@ namespace KHRRaytracingTriangle
                     instances, (uint)(sizeof(VkAccelerationStructureInstanceKHR) * instances.Length));
 
                 VkAccelerationStructureGeometryKHR accelerationGeometry = default;
-                accelerationGeometry.sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+                accelerationGeometry.sType = VkStructureType.AccelerationStructureGeometryKHR;
                 accelerationGeometry.pNext = null;
-                accelerationGeometry.flags = VkGeometryFlagBitsKHR.VK_GEOMETRY_OPAQUE_BIT_KHR;
-                accelerationGeometry.geometryType = VkGeometryTypeKHR.VK_GEOMETRY_TYPE_INSTANCES_KHR;
+                accelerationGeometry.flags = VkGeometryFlagsKHR.OpaqueKHR;
+                accelerationGeometry.geometryType = VkGeometryTypeKHR.InstancesKHR;
                 accelerationGeometry.geometry = default;
                 accelerationGeometry.geometry.instances = default;
                 accelerationGeometry.geometry.instances.sType =
-                    VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
+                    VkStructureType.AccelerationStructureGeometryInstancesDataKHR;
                 accelerationGeometry.geometry.instances.pNext = null;
                 accelerationGeometry.geometry.instances.arrayOfPointers = false;
                 accelerationGeometry.geometry.instances.data.deviceAddress = instanceBuffer.memoryAddress;
@@ -947,11 +940,11 @@ namespace KHRRaytracingTriangle
                 {
 
                     accelerationBuildGeometryInfo.sType =
-                        VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+                        VkStructureType.AccelerationStructureBuildGeometryInfoKHR;
                     accelerationBuildGeometryInfo.pNext = null;
-                    accelerationBuildGeometryInfo.type = VkAccelerationStructureTypeKHR.VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+                    accelerationBuildGeometryInfo.type = VkAccelerationStructureTypeKHR.TopLevelKHR;
                     accelerationBuildGeometryInfo.flags =
-                        VkBuildAccelerationStructureFlagBitsKHR.VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+                        VkBuildAccelerationStructureFlagsKHR.PreferFastTraceKHR;
                     accelerationBuildGeometryInfo.update = false;
                     accelerationBuildGeometryInfo.srcAccelerationStructure = 0;
                     accelerationBuildGeometryInfo.dstAccelerationStructure = topLevelAS;
@@ -973,45 +966,45 @@ namespace KHRRaytracingTriangle
                 VkCommandBuffer commandBuffer;
 
                 VkCommandBufferAllocateInfo commandBufferAllocateInfo2 = default;
-                commandBufferAllocateInfo2.sType = VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+                commandBufferAllocateInfo2.sType = VkStructureType.CommandBufferAllocateInfo;
                 commandBufferAllocateInfo2.pNext = null;
                 commandBufferAllocateInfo2.commandPool = commandPool;
-                commandBufferAllocateInfo2.level = VkCommandBufferLevel.VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+                commandBufferAllocateInfo2.level = VkCommandBufferLevel.Primary;
                 commandBufferAllocateInfo2.commandBufferCount = 1;
-                VulkanNative.
+                Vulkan.
                     vkAllocateCommandBuffers(device, &commandBufferAllocateInfo2, &commandBuffer);
 
                 VkCommandBufferBeginInfo commandBufferBeginInfo2 = default;
-                commandBufferBeginInfo2.sType = VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+                commandBufferBeginInfo2.sType = VkStructureType.CommandBufferBeginInfo;
                 commandBufferBeginInfo2.pNext = null;
-                commandBufferBeginInfo2.flags = VkCommandBufferUsageFlagBits.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-                VulkanNative.vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo2);
+                commandBufferBeginInfo2.flags = VkCommandBufferUsageFlags.OneTimeSubmit;
+                Vulkan.vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo2);
 
                 fixed (VkAccelerationStructureBuildOffsetInfoKHR** accelerationBuildOffsetsPtr = &accelerationBuildOffsets[0])
                 {
-                    VulkanNative.vkCmdBuildAccelerationStructureKHR(commandBuffer, 1, &accelerationBuildGeometryInfo,
+                    Vulkan.vkCmdBuildAccelerationStructureKHR(commandBuffer, 1, &accelerationBuildGeometryInfo,
                                                        accelerationBuildOffsetsPtr);
                 }
 
-                VulkanNative.vkEndCommandBuffer(commandBuffer);
+                Vulkan.vkEndCommandBuffer(commandBuffer);
 
                 VkSubmitInfo submitInfo = default;
-                submitInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_SUBMIT_INFO;
+                submitInfo.sType = VkStructureType.SubmitInfo;
                 submitInfo.pNext = null;
                 submitInfo.commandBufferCount = 1;
                 submitInfo.pCommandBuffers = &commandBuffer;
 
                 VkFence fence = 0;
                 VkFenceCreateInfo fenceInfo = default;
-                fenceInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+                fenceInfo.sType = VkStructureType.FenceCreateInfo;
                 fenceInfo.pNext = null;
 
-                VulkanNative.vkCreateFence(device, &fenceInfo, null, &fence);
-                VulkanNative.vkQueueSubmit(queue, 1, &submitInfo, fence);
-                VulkanNative.vkWaitForFences(device, 1, &fence, true, ulong.MaxValue);
+                Vulkan.vkCreateFence(device, &fenceInfo, null, out fence);
+                Vulkan.vkQueueSubmit(queue, 1, &submitInfo, fence);
+                Vulkan.vkWaitForFences(device, 1, &fence, true, ulong.MaxValue);
 
-                VulkanNative.vkDestroyFence(device, fence, null);
-                VulkanNative.vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+                Vulkan.vkDestroyFence(device, fence, null);
+                Vulkan.vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
             }
 
             // offscreen buffer
@@ -1019,66 +1012,60 @@ namespace KHRRaytracingTriangle
                 Debug.WriteLine($"Creating Offsceen Buffer..");
 
                 VkImageCreateInfo imageInfo = default;
-                imageInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+                imageInfo.sType = VkStructureType.ImageCreateInfo;
                 imageInfo.pNext = null;
-                imageInfo.imageType = VkImageType.VK_IMAGE_TYPE_2D;
+                imageInfo.imageType = VkImageType.Image2D;
                 imageInfo.format = desiredSurfaceFormat;
-                imageInfo.extent = new VkExtent3D() { width = desiredWindowWidth, height = desiredWindowHeight, depth = 1 };
+                imageInfo.extent = new Vortice.Mathematics.Size3() { Width = (int)desiredWindowWidth, Height = (int)desiredWindowHeight, Depth = 1 };
                 imageInfo.mipLevels = 1;
                 imageInfo.arrayLayers = 1;
-                imageInfo.samples = VkSampleCountFlagBits.VK_SAMPLE_COUNT_1_BIT;
-                imageInfo.tiling = VkImageTiling.VK_IMAGE_TILING_OPTIMAL;
-                imageInfo.usage = VkImageUsageFlagBits.VK_IMAGE_USAGE_STORAGE_BIT | VkImageUsageFlagBits.VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-                imageInfo.sharingMode = VkSharingMode.VK_SHARING_MODE_EXCLUSIVE;
+                imageInfo.samples = VkSampleCountFlags.Count1;
+                imageInfo.tiling = VkImageTiling.Optimal;
+                imageInfo.usage = VkImageUsageFlags.Storage | VkImageUsageFlags.TransferSrc;
+                imageInfo.sharingMode = VkSharingMode.Exclusive;
                 imageInfo.queueFamilyIndexCount = 0;
                 imageInfo.pQueueFamilyIndices = null;
-                imageInfo.initialLayout = VkImageLayout.VK_IMAGE_LAYOUT_UNDEFINED;
+                imageInfo.initialLayout = VkImageLayout.Undefined;
 
-                fixed (VkImage* offscreenBufferPtr = &offscreenBuffer)
-                {
-                    VulkanNative.vkCreateImage(device, &imageInfo, null, offscreenBufferPtr);
-                }
+                Vulkan.vkCreateImage(device, &imageInfo, null, out offscreenBuffer);
 
                 VkMemoryRequirements memoryRequirements = default;
-                VulkanNative.vkGetImageMemoryRequirements(device, offscreenBuffer, &memoryRequirements);
+                Vulkan.vkGetImageMemoryRequirements(device, offscreenBuffer, out memoryRequirements);
 
                 VkMemoryAllocateInfo memoryAllocateInfo = default;
-                memoryAllocateInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+                memoryAllocateInfo.sType = VkStructureType.MemoryAllocateInfo;
                 memoryAllocateInfo.pNext = null;
                 memoryAllocateInfo.allocationSize = memoryRequirements.size;
                 memoryAllocateInfo.memoryTypeIndex =
-                    FindMemoryType(memoryRequirements.memoryTypeBits, VkMemoryPropertyFlagBits.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+                    FindMemoryType(memoryRequirements.memoryTypeBits, VkMemoryPropertyFlags.DeviceLocal);
 
                 fixed (VkDeviceMemory* offscreenBufferMemoryPtr = &offscreenBufferMemory)
                 {
-                    VulkanNative.
+                    Vulkan.
                         vkAllocateMemory(device, &memoryAllocateInfo, null, offscreenBufferMemoryPtr);
                 }
 
-                VulkanNative.vkBindImageMemory(device, offscreenBuffer, offscreenBufferMemory, 0);
+                Vulkan.vkBindImageMemory(device, offscreenBuffer, offscreenBufferMemory, 0);
 
                 VkImageViewCreateInfo imageViewInfo = default;
-                imageViewInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+                imageViewInfo.sType = VkStructureType.ImageViewCreateInfo;
                 imageViewInfo.pNext = null;
-                imageViewInfo.viewType = VkImageViewType.VK_IMAGE_VIEW_TYPE_2D;
+                imageViewInfo.viewType = VkImageViewType.Image2D;
                 imageViewInfo.format = desiredSurfaceFormat;
                 imageViewInfo.subresourceRange = default;
-                imageViewInfo.subresourceRange.aspectMask = VkImageAspectFlagBits.VK_IMAGE_ASPECT_COLOR_BIT;
+                imageViewInfo.subresourceRange.aspectMask = VkImageAspectFlags.Color;
                 imageViewInfo.subresourceRange.baseMipLevel = 0;
                 imageViewInfo.subresourceRange.levelCount = 1;
                 imageViewInfo.subresourceRange.baseArrayLayer = 0;
                 imageViewInfo.subresourceRange.layerCount = 1;
                 imageViewInfo.image = offscreenBuffer;
                 imageViewInfo.flags = 0;
-                imageViewInfo.components.r = VkComponentSwizzle.VK_COMPONENT_SWIZZLE_R;
-                imageViewInfo.components.g = VkComponentSwizzle.VK_COMPONENT_SWIZZLE_G;
-                imageViewInfo.components.b = VkComponentSwizzle.VK_COMPONENT_SWIZZLE_B;
-                imageViewInfo.components.a = VkComponentSwizzle.VK_COMPONENT_SWIZZLE_A;
+                imageViewInfo.components.r = VkComponentSwizzle.R;
+                imageViewInfo.components.g = VkComponentSwizzle.G;
+                imageViewInfo.components.b = VkComponentSwizzle.B;
+                imageViewInfo.components.a = VkComponentSwizzle.A;
 
-                fixed (VkImageView* offscreenBufferViewPtr = &offscreenBufferView)
-                {
-                    VulkanNative.vkCreateImageView(device, &imageViewInfo, null, offscreenBufferViewPtr);
-                }
+                Vulkan.vkCreateImageView(device, &imageViewInfo, null, out offscreenBufferView);
             }
 
             // rt descriptor set layout
@@ -1088,32 +1075,29 @@ namespace KHRRaytracingTriangle
                 VkDescriptorSetLayoutBinding accelerationStructureLayoutBinding = default;
                 accelerationStructureLayoutBinding.binding = 0;
                 accelerationStructureLayoutBinding.descriptorType =
-                    VkDescriptorType.VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+                    VkDescriptorType.AccelerationStructureKHR;
                 accelerationStructureLayoutBinding.descriptorCount = 1;
-                accelerationStructureLayoutBinding.stageFlags = VkShaderStageFlagBits.VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+                accelerationStructureLayoutBinding.stageFlags = VkShaderStageFlags.RaygenKHR;
                 accelerationStructureLayoutBinding.pImmutableSamplers = null;
 
                 VkDescriptorSetLayoutBinding storageImageLayoutBinding = default;
                 storageImageLayoutBinding.binding = 1;
-                storageImageLayoutBinding.descriptorType = VkDescriptorType.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+                storageImageLayoutBinding.descriptorType = VkDescriptorType.StorageImage;
                 storageImageLayoutBinding.descriptorCount = 1;
-                storageImageLayoutBinding.stageFlags = VkShaderStageFlagBits.VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+                storageImageLayoutBinding.stageFlags = VkShaderStageFlags.RaygenKHR;
 
                 VkDescriptorSetLayoutBinding* bindings = stackalloc VkDescriptorSetLayoutBinding[]
                         { accelerationStructureLayoutBinding, storageImageLayoutBinding };
 
                 VkDescriptorSetLayoutCreateInfo layoutInfo = default;
-                layoutInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+                layoutInfo.sType = VkStructureType.DescriptorSetLayoutCreateInfo;
                 layoutInfo.pNext = null;
                 layoutInfo.flags = 0;
                 layoutInfo.bindingCount = 2;
                 layoutInfo.pBindings = bindings;
 
-                fixed (VkDescriptorSetLayout* descriptorSetLayoutPtr = &descriptorSetLayout)
-                {
-                    VulkanNative.
-                        vkCreateDescriptorSetLayout(device, &layoutInfo, null, descriptorSetLayoutPtr);
-                }
+                Vulkan.
+                    vkCreateDescriptorSetLayout(device, &layoutInfo, null, out descriptorSetLayout);
             }
 
             // rt descriptor set
@@ -1123,32 +1107,29 @@ namespace KHRRaytracingTriangle
                 VkDescriptorPoolSize* poolSizes = stackalloc VkDescriptorPoolSize[] {
                     new VkDescriptorPoolSize()
                     {
-                        type = VkDescriptorType.VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+                        type = VkDescriptorType.AccelerationStructureKHR,
                         descriptorCount = 1,
                     },
                     new VkDescriptorPoolSize()
                     {
-                        type = VkDescriptorType.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                        type = VkDescriptorType.StorageImage,
                         descriptorCount = 1,
                     }
                 };
 
                 VkDescriptorPoolCreateInfo descriptorPoolInfo = default;
-                descriptorPoolInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+                descriptorPoolInfo.sType = VkStructureType.DescriptorPoolCreateInfo;
                 descriptorPoolInfo.pNext = null;
                 descriptorPoolInfo.flags = 0;
                 descriptorPoolInfo.maxSets = 1;
                 descriptorPoolInfo.poolSizeCount = 2;
                 descriptorPoolInfo.pPoolSizes = poolSizes;
 
-                fixed (VkDescriptorPool* descriptorPoolPtr = &descriptorPool)
-                {
-                    VulkanNative.
-                        vkCreateDescriptorPool(device, &descriptorPoolInfo, null, descriptorPoolPtr);
-                }
+                Vulkan.
+                    vkCreateDescriptorPool(device, &descriptorPoolInfo, null, out descriptorPool);
 
                 VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = default;
-                descriptorSetAllocateInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+                descriptorSetAllocateInfo.sType = VkStructureType.DescriptorSetAllocateInfo;
                 descriptorSetAllocateInfo.pNext = null;
                 descriptorSetAllocateInfo.descriptorPool = descriptorPool;
                 descriptorSetAllocateInfo.descriptorSetCount = 1;
@@ -1159,13 +1140,13 @@ namespace KHRRaytracingTriangle
 
                 fixed (VkDescriptorSet* descriptorSetPtr = &descriptorSet)
                 {
-                    VulkanNative.
+                    Vulkan.
                     vkAllocateDescriptorSets(device, &descriptorSetAllocateInfo, descriptorSetPtr);
                 }
 
                 VkWriteDescriptorSetAccelerationStructureKHR descriptorAccelerationStructureInfo;
                 descriptorAccelerationStructureInfo.sType =
-                    VkStructureType.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+                    VkStructureType.WriteDescriptorSetAccelerationStructureKHR;
                 descriptorAccelerationStructureInfo.pNext = null;
                 descriptorAccelerationStructureInfo.accelerationStructureCount = 1;
                 fixed (VkAccelerationStructureKHR* topLevelASPtr = &topLevelAS)
@@ -1174,31 +1155,31 @@ namespace KHRRaytracingTriangle
                 }
 
                 VkWriteDescriptorSet accelerationStructureWrite = default;
-                accelerationStructureWrite.sType = VkStructureType.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                accelerationStructureWrite.sType = VkStructureType.WriteDescriptorSet;
                 accelerationStructureWrite.pNext = &descriptorAccelerationStructureInfo;
                 accelerationStructureWrite.dstSet = descriptorSet;
                 accelerationStructureWrite.dstBinding = 0;
                 accelerationStructureWrite.descriptorCount = 1;
-                accelerationStructureWrite.descriptorType = VkDescriptorType.VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+                accelerationStructureWrite.descriptorType = VkDescriptorType.AccelerationStructureKHR;
 
                 VkDescriptorImageInfo storageImageInfo = default;
                 storageImageInfo.sampler = 0;
                 storageImageInfo.imageView = offscreenBufferView;
-                storageImageInfo.imageLayout = VkImageLayout.VK_IMAGE_LAYOUT_GENERAL;
+                storageImageInfo.imageLayout = VkImageLayout.General;
 
                 VkWriteDescriptorSet outputImageWrite = default;
-                outputImageWrite.sType = VkStructureType.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                outputImageWrite.sType = VkStructureType.WriteDescriptorSet;
                 outputImageWrite.pNext = null;
                 outputImageWrite.dstSet = descriptorSet;
                 outputImageWrite.dstBinding = 1;
-                outputImageWrite.descriptorType = VkDescriptorType.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+                outputImageWrite.descriptorType = VkDescriptorType.StorageImage;
                 outputImageWrite.descriptorCount = 1;
                 outputImageWrite.pImageInfo = &storageImageInfo;
 
                 VkWriteDescriptorSet* descriptorWrites = stackalloc VkWriteDescriptorSet[]
                         { accelerationStructureWrite, outputImageWrite };
 
-                VulkanNative.vkUpdateDescriptorSets(device, 2, descriptorWrites, 0,
+                Vulkan.vkUpdateDescriptorSets(device, 2, descriptorWrites, 0,
                                        null);
             }
 
@@ -1207,7 +1188,7 @@ namespace KHRRaytracingTriangle
                 Debug.WriteLine($"Creating RT Pipeline Layout..");
 
                 VkPipelineLayoutCreateInfo pipelineLayoutInfo = default;
-                pipelineLayoutInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+                pipelineLayoutInfo.sType = VkStructureType.PipelineLayoutCreateInfo;
                 pipelineLayoutInfo.pNext = null;
                 pipelineLayoutInfo.flags = 0;
                 pipelineLayoutInfo.setLayoutCount = 1;
@@ -1218,11 +1199,8 @@ namespace KHRRaytracingTriangle
                 pipelineLayoutInfo.pushConstantRangeCount = 0;
                 pipelineLayoutInfo.pPushConstantRanges = null;
 
-                fixed (VkPipelineLayout* pipelineLayoutPtr = &pipelineLayout)
-                {
-                    VulkanNative.
-                        vkCreatePipelineLayout(device, &pipelineLayoutInfo, null, pipelineLayoutPtr);
-                }
+                Vulkan.
+                    vkCreatePipelineLayout(device, &pipelineLayoutInfo, null, out pipelineLayout);
             }
 
             // rt pipeline
@@ -1236,23 +1214,23 @@ namespace KHRRaytracingTriangle
                 byte[] rmissShaderSrc = File.ReadAllBytes("Shaders/ray-miss.spv");
 
                 VkPipelineShaderStageCreateInfo rayGenShaderStageInfo = default;
-                rayGenShaderStageInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+                rayGenShaderStageInfo.sType = VkStructureType.PipelineShaderStageCreateInfo;
                 rayGenShaderStageInfo.pNext = null;
-                rayGenShaderStageInfo.stage = VkShaderStageFlagBits.VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+                rayGenShaderStageInfo.stage = VkShaderStageFlags.RaygenKHR;
                 rayGenShaderStageInfo.module = CreateShaderModule(rgenShaderSrc);
                 rayGenShaderStageInfo.pName = "main".ToPointer();
 
                 VkPipelineShaderStageCreateInfo rayChitShaderStageInfo = default;
-                rayChitShaderStageInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+                rayChitShaderStageInfo.sType = VkStructureType.PipelineShaderStageCreateInfo;
                 rayChitShaderStageInfo.pNext = null;
-                rayChitShaderStageInfo.stage = VkShaderStageFlagBits.VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+                rayChitShaderStageInfo.stage = VkShaderStageFlags.ClosestHitKHR;
                 rayChitShaderStageInfo.module = CreateShaderModule(rchitShaderSrc);
                 rayChitShaderStageInfo.pName = "main".ToPointer();
 
                 VkPipelineShaderStageCreateInfo rayMissShaderStageInfo = default;
-                rayMissShaderStageInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+                rayMissShaderStageInfo.sType = VkStructureType.PipelineShaderStageCreateInfo;
                 rayMissShaderStageInfo.pNext = null;
-                rayMissShaderStageInfo.stage = VkShaderStageFlagBits.VK_SHADER_STAGE_MISS_BIT_KHR;
+                rayMissShaderStageInfo.stage = VkShaderStageFlags.MissKHR;
                 rayMissShaderStageInfo.module = CreateShaderModule(rmissShaderSrc);
                 rayMissShaderStageInfo.pName = "main".ToPointer();
 
@@ -1263,27 +1241,27 @@ namespace KHRRaytracingTriangle
                 };
 
                 VkRayTracingShaderGroupCreateInfoKHR rayGenGroup = default;
-                rayGenGroup.sType = VkStructureType.VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+                rayGenGroup.sType = VkStructureType.RayTracingShaderGroupCreateInfoKHR;
                 rayGenGroup.pNext = null;
-                rayGenGroup.type = VkRayTracingShaderGroupTypeKHR.VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+                rayGenGroup.type = VkRayTracingShaderGroupTypeKHR.GeneralKHR;
                 rayGenGroup.generalShader = 0;
                 rayGenGroup.closestHitShader = VK_SHADER_UNUSED_KHR;
                 rayGenGroup.anyHitShader = VK_SHADER_UNUSED_KHR;
                 rayGenGroup.intersectionShader = VK_SHADER_UNUSED_KHR;
 
                 VkRayTracingShaderGroupCreateInfoKHR rayHitGroup = default;
-                rayHitGroup.sType = VkStructureType.VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+                rayHitGroup.sType = VkStructureType.RayTracingShaderGroupCreateInfoKHR;
                 rayHitGroup.pNext = null;
-                rayHitGroup.type = VkRayTracingShaderGroupTypeKHR.VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
+                rayHitGroup.type = VkRayTracingShaderGroupTypeKHR.TrianglesHitGroupKHR;
                 rayHitGroup.generalShader = VK_SHADER_UNUSED_KHR;
                 rayHitGroup.closestHitShader = 1;
                 rayHitGroup.anyHitShader = VK_SHADER_UNUSED_KHR;
                 rayHitGroup.intersectionShader = VK_SHADER_UNUSED_KHR;
 
                 VkRayTracingShaderGroupCreateInfoKHR rayMissGroup = default;
-                rayMissGroup.sType = VkStructureType.VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+                rayMissGroup.sType = VkStructureType.RayTracingShaderGroupCreateInfoKHR;
                 rayMissGroup.pNext = null;
-                rayMissGroup.type = VkRayTracingShaderGroupTypeKHR.VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+                rayMissGroup.type = VkRayTracingShaderGroupTypeKHR.GeneralKHR;
                 rayMissGroup.generalShader = 2;
                 rayMissGroup.closestHitShader = VK_SHADER_UNUSED_KHR;
                 rayMissGroup.anyHitShader = VK_SHADER_UNUSED_KHR;
@@ -1296,7 +1274,7 @@ namespace KHRRaytracingTriangle
                 };
 
                 VkRayTracingPipelineCreateInfoKHR pipelineInfo = default;
-                pipelineInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
+                pipelineInfo.sType = VkStructureType.RayTracingPipelineCreateInfoKHR;
                 pipelineInfo.pNext = null;
                 pipelineInfo.flags = 0;
                 pipelineInfo.stageCount = 3;
@@ -1305,7 +1283,7 @@ namespace KHRRaytracingTriangle
                 pipelineInfo.pGroups = shaderGroups;
                 pipelineInfo.maxRecursionDepth = 1;
                 pipelineInfo.libraries = default;
-                pipelineInfo.libraries.sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR;
+                pipelineInfo.libraries.sType = VkStructureType.PipelineLibraryCreateInfoKHR;
                 pipelineInfo.libraries.pNext = null;
                 pipelineInfo.libraries.libraryCount = 0;
                 pipelineInfo.libraries.pLibraries = null;
@@ -1316,7 +1294,7 @@ namespace KHRRaytracingTriangle
 
                 fixed (VkPipeline* pipelinePtr = &pipeline)
                 {
-                    VulkanNative.
+                    Vulkan.
                         vkCreateRayTracingPipelinesKHR(device, 0, 1, &pipelineInfo, null, pipelinePtr);
                 }
             }
@@ -1330,97 +1308,93 @@ namespace KHRRaytracingTriangle
                     shaderBindingTableGroupCount * rayTracingProperties.shaderGroupHandleSize;
 
                 VkBufferCreateInfo bufferInfo = default;
-                bufferInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+                bufferInfo.sType = VkStructureType.BufferCreateInfo;
                 bufferInfo.pNext = null;
                 bufferInfo.size = shaderBindingTableSize;
-                bufferInfo.usage = VkBufferUsageFlagBits.VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-                bufferInfo.sharingMode = VkSharingMode.VK_SHARING_MODE_EXCLUSIVE;
+                bufferInfo.usage = VkBufferUsageFlags.TransferSrc;
+                bufferInfo.sharingMode = VkSharingMode.Exclusive;
                 bufferInfo.queueFamilyIndexCount = 0;
                 bufferInfo.pQueueFamilyIndices = null;
-                VkBuffer newBuffer;
-                VulkanNative.vkCreateBuffer(device, &bufferInfo, null, &newBuffer);
-                shaderBindingTable.buffer = newBuffer;
+
+                Vulkan.vkCreateBuffer(device, &bufferInfo, null, out shaderBindingTable.buffer);
 
                 VkMemoryRequirements memoryRequirements = default;
-                VulkanNative.vkGetBufferMemoryRequirements(device, shaderBindingTable.buffer, &memoryRequirements);
+                Vulkan.vkGetBufferMemoryRequirements(device, shaderBindingTable.buffer, out memoryRequirements);
 
                 VkMemoryAllocateInfo memAllocInfo = default;
-                memAllocInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+                memAllocInfo.sType = VkStructureType.MemoryAllocateInfo;
                 memAllocInfo.pNext = null;
                 memAllocInfo.allocationSize = memoryRequirements.size;
                 memAllocInfo.memoryTypeIndex =
-                    FindMemoryType(memoryRequirements.memoryTypeBits, VkMemoryPropertyFlagBits.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+                    FindMemoryType(memoryRequirements.memoryTypeBits, VkMemoryPropertyFlags.HostVisible);
 
                 VkDeviceMemory newMemory;
-                VulkanNative.
+                Vulkan.
                     vkAllocateMemory(device, &memAllocInfo, null, &newMemory);
                 shaderBindingTable.memory = newMemory;
 
-                VulkanNative.
+                Vulkan.
                     vkBindBufferMemory(device, shaderBindingTable.buffer, shaderBindingTable.memory, 0);
 
                 void* dstData;
-                VulkanNative.
+                Vulkan.
                     vkMapMemory(device, shaderBindingTable.memory, 0, shaderBindingTableSize, 0, &dstData);
 
-                VulkanNative.vkGetRayTracingShaderGroupHandlesKHR(device, pipeline, 0, shaderBindingTableGroupCount,
+                Vulkan.vkGetRayTracingShaderGroupHandlesKHR(device, pipeline, 0, shaderBindingTableGroupCount,
                                                      new UIntPtr(shaderBindingTableSize), dstData); // TODO UIntPtr
-                VulkanNative.vkUnmapMemory(device, shaderBindingTable.memory);
+                Vulkan.vkUnmapMemory(device, shaderBindingTable.memory);
             }
 
             Debug.WriteLine($"Initializing Swapchain..");
 
             uint presentModeCount = 0;
-            VulkanNative.vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface,
+            Vulkan.vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface,
                                                                        &presentModeCount, null);
 
             VkPresentModeKHR[] presentModes = new VkPresentModeKHR[presentModeCount];
             fixed (VkPresentModeKHR* presentModesPtr = presentModes)
             {
-                VulkanNative.vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount,
+                Vulkan.vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount,
                                                           presentModesPtr);
             }
 
-            bool isMailboxModeSupported = presentModes.Any(m => m == VkPresentModeKHR.VK_PRESENT_MODE_MAILBOX_KHR);
+            bool isMailboxModeSupported = presentModes.Any(m => m == VkPresentModeKHR.MailboxKHR);
 
             VkSurfaceCapabilitiesKHR capabilitiesKHR;
-            var result = VulkanNative.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &capabilitiesKHR);
+            var result = Vulkan.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, out capabilitiesKHR);
             Helpers.CheckErrors(result);
 
             var extent = ChooseSwapExtent(capabilitiesKHR);
             VkSwapchainCreateInfoKHR swapchainInfo = default;
-            swapchainInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+            swapchainInfo.sType = VkStructureType.SwapchainCreateInfoKHR;
             swapchainInfo.pNext = null;
             swapchainInfo.surface = surface;
             swapchainInfo.minImageCount = 3;
             swapchainInfo.imageFormat = desiredSurfaceFormat;
-            swapchainInfo.imageColorSpace = VkColorSpaceKHR.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
-            swapchainInfo.imageExtent.width = extent.width; //desiredWindowWidth;
-            swapchainInfo.imageExtent.height = extent.height; //desiredWindowHeight;
+            swapchainInfo.imageColorSpace = VkColorSpaceKHR.SrgbNonlinearKHR;
+            swapchainInfo.imageExtent.Width = extent.Width; //desiredWindowWidth;
+            swapchainInfo.imageExtent.Height = extent.Height; //desiredWindowHeight;
             swapchainInfo.imageArrayLayers = 1;
             swapchainInfo.imageUsage =
-                VkImageUsageFlagBits.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VkImageUsageFlagBits.VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-            swapchainInfo.imageSharingMode = VkSharingMode.VK_SHARING_MODE_EXCLUSIVE;
+                 VkImageUsageFlags.ColorAttachment | VkImageUsageFlags.TransferDst;
+            swapchainInfo.imageSharingMode = VkSharingMode.Exclusive;
             swapchainInfo.queueFamilyIndexCount = 0;
-            swapchainInfo.preTransform = VkSurfaceTransformFlagBitsKHR.VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-            swapchainInfo.compositeAlpha = VkCompositeAlphaFlagBitsKHR.VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+            swapchainInfo.preTransform = VkSurfaceTransformFlagsKHR.IdentityKHR;
+            swapchainInfo.compositeAlpha = VkCompositeAlphaFlagsKHR.OpaqueKHR;
             swapchainInfo.presentMode =
-                isMailboxModeSupported ? VkPresentModeKHR.VK_PRESENT_MODE_MAILBOX_KHR : VkPresentModeKHR.VK_PRESENT_MODE_FIFO_KHR;
+                isMailboxModeSupported ? VkPresentModeKHR.MailboxKHR : VkPresentModeKHR.FifoKHR;
             swapchainInfo.clipped = true;
             swapchainInfo.oldSwapchain = 0;
 
-            fixed (VkSwapchainKHR* swapchainPtr = &swapchain)
-            {
-                VulkanNative.vkCreateSwapchainKHR(device, &swapchainInfo, null, swapchainPtr);
-            }
+            Vulkan.vkCreateSwapchainKHR(device, &swapchainInfo, null, out swapchain);
 
             uint amountOfImagesInSwapchain = 0;
-            VulkanNative.vkGetSwapchainImagesKHR(device, swapchain, &amountOfImagesInSwapchain, null);
+            Vulkan.vkGetSwapchainImagesKHR(device, swapchain, &amountOfImagesInSwapchain, null);
             VkImage[] swapchainImages = new VkImage[amountOfImagesInSwapchain];
 
             fixed (VkImage* swapchainImagesPtr = &swapchainImages[0])
             {
-                VulkanNative.vkGetSwapchainImagesKHR(device, swapchain, &amountOfImagesInSwapchain,
+                Vulkan.vkGetSwapchainImagesKHR(device, swapchain, &amountOfImagesInSwapchain,
                                                          swapchainImagesPtr);
             }
 
@@ -1429,42 +1403,39 @@ namespace KHRRaytracingTriangle
             for (uint ii = 0; ii < amountOfImagesInSwapchain; ++ii)
             {
                 VkImageViewCreateInfo imageViewInfo = default;
-                imageViewInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+                imageViewInfo.sType = VkStructureType.ImageViewCreateInfo;
                 imageViewInfo.pNext = null;
                 imageViewInfo.image = swapchainImages[ii];
-                imageViewInfo.viewType = VkImageViewType.VK_IMAGE_VIEW_TYPE_2D;
+                imageViewInfo.viewType = VkImageViewType.Image2D;
                 imageViewInfo.format = desiredSurfaceFormat;
-                imageViewInfo.subresourceRange.aspectMask = VkImageAspectFlagBits.VK_IMAGE_ASPECT_COLOR_BIT;
+                imageViewInfo.subresourceRange.aspectMask = VkImageAspectFlags.Color;
                 imageViewInfo.subresourceRange.baseMipLevel = 0;
                 imageViewInfo.subresourceRange.levelCount = 1;
                 imageViewInfo.subresourceRange.baseArrayLayer = 0;
                 imageViewInfo.subresourceRange.layerCount = 1;
 
-                fixed (VkImageView* imagesViewPtr = &imageViews[ii])
-                {
-                    VulkanNative.vkCreateImageView(device, &imageViewInfo, null, imagesViewPtr);
-                }
+                Vulkan.vkCreateImageView(device, &imageViewInfo, null, out imageViews[ii]);
             };
 
             Debug.WriteLine($"Recording frame commands..");
 
             VkImageCopy copyRegion = default;
             copyRegion.srcSubresource = default;
-            copyRegion.srcSubresource.aspectMask = VkImageAspectFlagBits.VK_IMAGE_ASPECT_COLOR_BIT;
+            copyRegion.srcSubresource.aspectMask = VkImageAspectFlags.Color;
             copyRegion.srcSubresource.mipLevel = 0;
             copyRegion.srcSubresource.baseArrayLayer = 0;
             copyRegion.srcSubresource.layerCount = 1;
-            copyRegion.dstSubresource.aspectMask = VkImageAspectFlagBits.VK_IMAGE_ASPECT_COLOR_BIT;
+            copyRegion.dstSubresource.aspectMask = VkImageAspectFlags.Color;
             copyRegion.dstSubresource.mipLevel = 0;
             copyRegion.dstSubresource.baseArrayLayer = 0;
             copyRegion.dstSubresource.layerCount = 1;
             copyRegion.extent = default;
-            copyRegion.extent.depth = 1;
-            copyRegion.extent.width = desiredWindowWidth;
-            copyRegion.extent.height = desiredWindowHeight;
+            copyRegion.extent.Depth = 1;
+            copyRegion.extent.Width = (int)desiredWindowWidth;
+            copyRegion.extent.Height = (int)desiredWindowHeight;
 
             VkImageSubresourceRange subresourceRange = default;
-            subresourceRange.aspectMask = VkImageAspectFlagBits.VK_IMAGE_ASPECT_COLOR_BIT;
+            subresourceRange.aspectMask = VkImageAspectFlags.Color;
             subresourceRange.baseMipLevel = 0;
             subresourceRange.levelCount = 1;
             subresourceRange.baseArrayLayer = 0;
@@ -1505,22 +1476,22 @@ namespace KHRRaytracingTriangle
             // clang-format on
 
             VkCommandBufferAllocateInfo commandBufferAllocateInfo = default;
-            commandBufferAllocateInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+            commandBufferAllocateInfo.sType = VkStructureType.CommandBufferAllocateInfo;
             commandBufferAllocateInfo.pNext = null;
             commandBufferAllocateInfo.commandPool = commandPool;
-            commandBufferAllocateInfo.level = VkCommandBufferLevel.VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+            commandBufferAllocateInfo.level = VkCommandBufferLevel.Primary;
             commandBufferAllocateInfo.commandBufferCount = amountOfImagesInSwapchain;
 
             commandBuffers = new VkCommandBuffer[amountOfImagesInSwapchain];
 
             fixed (VkCommandBuffer* commandBuffersPtr = &commandBuffers[0])
             {
-                VulkanNative.
+                Vulkan.
                     vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, commandBuffersPtr);
             }
 
             VkCommandBufferBeginInfo commandBufferBeginInfo = default;
-            commandBufferBeginInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            commandBufferBeginInfo.sType = VkStructureType.CommandBufferBeginInfo;
             commandBufferBeginInfo.pNext = null;
             commandBufferBeginInfo.flags = 0;
             commandBufferBeginInfo.pInheritanceInfo = null;
@@ -1530,58 +1501,52 @@ namespace KHRRaytracingTriangle
                 VkCommandBuffer commandBuffer = commandBuffers[ii];
                 VkImage swapchainImage = swapchainImages[ii];
 
-                VulkanNative.vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo);
+                Vulkan.vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo);
 
                 // transition offscreen buffer into shader writeable state
-                InsertCommandImageBarrier(commandBuffer, offscreenBuffer, 0, VkAccessFlagBits.VK_ACCESS_SHADER_WRITE_BIT,
-                                          VkImageLayout.VK_IMAGE_LAYOUT_UNDEFINED, VkImageLayout.VK_IMAGE_LAYOUT_GENERAL,
+                InsertCommandImageBarrier(commandBuffer, offscreenBuffer, 0, VkAccessFlags.ShaderWrite,
+                                          VkImageLayout.Undefined, VkImageLayout.General,
                                           subresourceRange);
 
-                VulkanNative.vkCmdBindPipeline(commandBuffer, VkPipelineBindPoint.VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipeline);
+                Vulkan.vkCmdBindPipeline(commandBuffer, VkPipelineBindPoint.RayTracingKHR, pipeline);
                 fixed (VkDescriptorSet* descriptorSetPtr = &descriptorSet)
                 {
-                    VulkanNative.vkCmdBindDescriptorSets(commandBuffer, VkPipelineBindPoint.VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
+                    Vulkan.vkCmdBindDescriptorSets(commandBuffer, VkPipelineBindPoint.RayTracingKHR,
                                         pipelineLayout, 0, 1, descriptorSetPtr, 0, (uint*)0);
                 }
-                VulkanNative.vkCmdTraceRaysKHR(commandBuffer, &rayGenSBT, &rayMissSBT, &rayHitSBT, &rayCallSBT,
+                Vulkan.vkCmdTraceRaysKHR(commandBuffer, &rayGenSBT, &rayMissSBT, &rayHitSBT, &rayCallSBT,
                                   desiredWindowWidth, desiredWindowHeight, 1);
 
                 // transition swapchain image into copy destination state
-                InsertCommandImageBarrier(commandBuffer, swapchainImage, 0, VkAccessFlagBits.VK_ACCESS_TRANSFER_WRITE_BIT,
-                                          VkImageLayout.VK_IMAGE_LAYOUT_UNDEFINED,
-                                          VkImageLayout.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, subresourceRange);
+                InsertCommandImageBarrier(commandBuffer, swapchainImage, 0, VkAccessFlags.TransferWrite,
+                                          VkImageLayout.Undefined,
+                                          VkImageLayout.TransferDstOptimal, subresourceRange);
 
                 // transition offscreen buffer into copy source state
-                InsertCommandImageBarrier(commandBuffer, offscreenBuffer, VkAccessFlagBits.VK_ACCESS_SHADER_WRITE_BIT,
-                                          VkAccessFlagBits.VK_ACCESS_TRANSFER_READ_BIT, VkImageLayout.VK_IMAGE_LAYOUT_GENERAL,
-                                          VkImageLayout.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, subresourceRange);
+                InsertCommandImageBarrier(commandBuffer, offscreenBuffer, VkAccessFlags.ShaderWrite,
+                                          VkAccessFlags.TransferRead, VkImageLayout.General,
+                                          VkImageLayout.TransferSrcOptimal, subresourceRange);
 
                 // copy offscreen buffer into swapchain image
-                VulkanNative.vkCmdCopyImage(commandBuffer, offscreenBuffer, VkImageLayout.VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                               swapchainImage, VkImageLayout.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+                Vulkan.vkCmdCopyImage(commandBuffer, offscreenBuffer, VkImageLayout.TransferSrcOptimal,
+                               swapchainImage, VkImageLayout.TransferDstOptimal, 1, &copyRegion);
 
                 // transition swapchain image into presentable state
-                InsertCommandImageBarrier(commandBuffer, swapchainImage, 0, VkAccessFlagBits.VK_ACCESS_TRANSFER_WRITE_BIT,
-                                          VkImageLayout.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                          VkImageLayout.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, subresourceRange);
+                InsertCommandImageBarrier(commandBuffer, swapchainImage, 0, VkAccessFlags.TransferWrite,
+                                          VkImageLayout.TransferDstOptimal,
+                                          VkImageLayout.PresentSrcKHR, subresourceRange);
 
-                VulkanNative.vkEndCommandBuffer(commandBuffer);
+                Vulkan.vkEndCommandBuffer(commandBuffer);
             }
 
             VkSemaphoreCreateInfo semaphoreInfo = default;
-            semaphoreInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+            semaphoreInfo.sType = VkStructureType.SemaphoreCreateInfo;
             semaphoreInfo.pNext = null;
 
-            fixed (VkSemaphore* semaphoreImageAvailablePtr = &semaphoreImageAvailable)
-            {
-                VulkanNative.vkCreateSemaphore(device, &semaphoreInfo, null, semaphoreImageAvailablePtr);
-            }
+            Vulkan.vkCreateSemaphore(device, &semaphoreInfo, null, out semaphoreImageAvailable);
 
-            fixed (VkSemaphore* semaphoreRenderingAvailablePtr = &semaphoreRenderingAvailable)
-            {
-                VulkanNative.
-                    vkCreateSemaphore(device, &semaphoreInfo, null, semaphoreRenderingAvailablePtr);
-            }
+            Vulkan.
+                vkCreateSemaphore(device, &semaphoreInfo, null, out semaphoreRenderingAvailable);
 
             Debug.WriteLine($"Done!");
             Debug.WriteLine($"Drawing..");
@@ -1611,13 +1576,13 @@ namespace KHRRaytracingTriangle
             while (!isClosing)
             {
                 uint imageIndex = 0;
-                VulkanNative.vkAcquireNextImageKHR(device, swapchain, ulong.MaxValue,
-                                                       semaphoreImageAvailable, 0, &imageIndex);
+                Vulkan.vkAcquireNextImageKHR(device, swapchain, ulong.MaxValue,
+                                                       semaphoreImageAvailable, 0, out imageIndex);
 
-                VkPipelineStageFlagBits* waitStageMasks = stackalloc VkPipelineStageFlagBits[] { VkPipelineStageFlagBits.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+                VkPipelineStageFlags* waitStageMasks = stackalloc VkPipelineStageFlags[] { VkPipelineStageFlags.ColorAttachmentOutput };
 
                 VkSubmitInfo submitInfo = default;
-                submitInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_SUBMIT_INFO;
+                submitInfo.sType = VkStructureType.SubmitInfo;
                 submitInfo.pNext = null;
                 submitInfo.waitSemaphoreCount = 1;
                 fixed (VkSemaphore* semaphoreImageAvailablePtr = &semaphoreImageAvailable)
@@ -1636,10 +1601,10 @@ namespace KHRRaytracingTriangle
                     submitInfo.pSignalSemaphores = semaphoreRenderingAvailablePtr;
                 }
 
-                VulkanNative.vkQueueSubmit(queue, 1, &submitInfo, 0);
+                Vulkan.vkQueueSubmit(queue, 1, &submitInfo, 0);
 
                 VkPresentInfoKHR presentInfo = default;
-                presentInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+                presentInfo.sType = VkStructureType.PresentInfoKHR;
                 presentInfo.pNext = null;
                 presentInfo.waitSemaphoreCount = 1;
                 fixed (VkSemaphore* semaphoreRenderingAvailablePtr = &semaphoreRenderingAvailable)
@@ -1654,9 +1619,9 @@ namespace KHRRaytracingTriangle
                 presentInfo.pImageIndices = &imageIndex;
                 presentInfo.pResults = null;
 
-                VulkanNative.vkQueuePresentKHR(queue, &presentInfo);
+                Vulkan.vkQueuePresentKHR(queue, &presentInfo);
 
-                VulkanNative.vkQueueWaitIdle(queue);
+                Vulkan.vkQueueWaitIdle(queue);
 
                 Application.DoEvents();
             }
@@ -1664,17 +1629,17 @@ namespace KHRRaytracingTriangle
             return EXIT_SUCCESS;
         }
 
-        private VkExtent2D ChooseSwapExtent(VkSurfaceCapabilitiesKHR capabilities)
+        private Size ChooseSwapExtent(VkSurfaceCapabilitiesKHR capabilities)
         {
-            if (capabilities.currentExtent.width != uint.MaxValue)
+            if (capabilities.currentExtent.Width != int.MaxValue)
             {
                 return capabilities.currentExtent;
             }
 
-            return new VkExtent2D()
+            return new Size()
             {
-                width = Math.Max(capabilities.minImageExtent.width, Math.Min(capabilities.maxImageExtent.width, (uint)this.desiredWindowWidth)),
-                height = Math.Max(capabilities.minImageExtent.height, Math.Min(capabilities.maxImageExtent.height, (uint)this.desiredWindowHeight)),
+                Width = (int)Math.Max(capabilities.minImageExtent.Width, Math.Min(capabilities.maxImageExtent.Width, (uint)this.desiredWindowWidth)),
+                Height = (int)Math.Max(capabilities.minImageExtent.Height, Math.Min(capabilities.maxImageExtent.Height, (uint)this.desiredWindowHeight)),
             };
         }
     }

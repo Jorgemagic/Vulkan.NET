@@ -61,7 +61,8 @@ namespace VulkanRaytracing
         string[] instanceExtensions = new string[] {
             "VK_KHR_surface",
             "VK_KHR_win32_surface",
-            "VK_KHR_get_physical_device_properties2"
+            "VK_KHR_get_physical_device_properties2",
+            "VK_EXT_debug_utils",
         };
 
         string[] validationLayers = new string[] {
@@ -402,6 +403,8 @@ namespace VulkanRaytracing
                 Helpers.CheckErrors(result);
             }
 
+            this.SetupDebugMessenger();
+
             uint deviceCount = 0;
             result = VulkanNative.vkEnumeratePhysicalDevices(instance, &deviceCount, null);
             Helpers.CheckErrors(result);
@@ -485,6 +488,7 @@ namespace VulkanRaytracing
                 deviceExtensionsArray[i] = Marshal.StringToHGlobalAnsi(extension);
             }
 
+            VkPhysicalDeviceFeatures deviceFeatures = default;
             VkDeviceCreateInfo deviceInfo = new VkDeviceCreateInfo()
             {
                 sType = VkStructureType.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
@@ -493,7 +497,7 @@ namespace VulkanRaytracing
                 pQueueCreateInfos = &deviceQueueInfo,
                 enabledExtensionCount = (uint)deviceExtensions.Length,
                 ppEnabledExtensionNames = (byte**)deviceExtensionsArray,
-                pEnabledFeatures = null,
+                pEnabledFeatures = &deviceFeatures,
             };
 
             fixed (VkDevice* devicePtr = &device)
@@ -1099,22 +1103,22 @@ namespace VulkanRaytracing
             {
                     new VkAccelerationStructureInstanceKHR()
                     {
-                        transform = new VkTransformMatrixKHR()
+                        transform =
                         {
-                            matrix_0 = 1.0f,
-                            matrix_1 = 0.0f,
-                            matrix_2 = 0.0f,
-                            matrix_3 = 0.0f,
+                            matrix_0 = 1,
+                            matrix_1 = 0,
+                            matrix_2 = 0,
+                            matrix_3 = 0,
 
-                            matrix_4 = 0.0f,
-                            matrix_5 = 1.0f,
-                            matrix_6 = 0.0f,
-                            matrix_7 = 0.0f,
+                            matrix_4 = 0,
+                            matrix_5 = 1,
+                            matrix_6 = 0,
+                            matrix_7 = 0,
 
-                            matrix_8 = 0.0f,
-                            matrix_9 = 0.0f,
-                            matrix_10 = 1.0f,
-                            matrix_11 = 0.0f,
+                            matrix_8 = 0,
+                            matrix_9 = 0,
+                            matrix_10 = 1,
+                            matrix_11 = 0,
                         },
                         instanceCustomIndex = 0,
                         mask = 0xff,
@@ -1638,6 +1642,75 @@ namespace VulkanRaytracing
                 width = Math.Max(capabilities.minImageExtent.width, Math.Min(capabilities.maxImageExtent.width, (uint)this.desiredWindowWidth)),
                 height = Math.Max(capabilities.minImageExtent.height, Math.Min(capabilities.maxImageExtent.height, (uint)this.desiredWindowHeight)),
             };
+        }
+
+        // Callback Message
+        public delegate VkBool32 DebugCallbackDelegate(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagBitsEXT messageType, VkDebugUtilsMessengerCallbackDataEXT pCallbackData, void* pUserData);
+        public static DebugCallbackDelegate CallbackDelegate = new DebugCallbackDelegate(DebugCallback);
+
+        private void PopulateDebugMessengerCreateInfo(out VkDebugUtilsMessengerCreateInfoEXT createInfo)
+        {
+            createInfo = default;
+            createInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+            createInfo.messageSeverity = VkDebugUtilsMessageSeverityFlagBitsEXT.VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT | 
+                                         VkDebugUtilsMessageSeverityFlagBitsEXT.VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | 
+                                         VkDebugUtilsMessageSeverityFlagBitsEXT.VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | 
+                                         VkDebugUtilsMessageSeverityFlagBitsEXT.VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+            createInfo.messageType = VkDebugUtilsMessageTypeFlagBitsEXT.VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | 
+                                     VkDebugUtilsMessageTypeFlagBitsEXT.VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT | 
+                                     VkDebugUtilsMessageTypeFlagBitsEXT.VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT;
+            createInfo.pfnUserCallback = Marshal.GetFunctionPointerForDelegate(CallbackDelegate);
+            createInfo.pUserData = null;
+        }
+
+        public static VkBool32 DebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagBitsEXT messageType, VkDebugUtilsMessengerCallbackDataEXT pCallbackData, void* pUserData)
+        {
+            Debug.WriteLine($"<<Vulkan Validation Layer>> {Helpers.GetString(pCallbackData.pMessage)}");
+            return false;
+        }
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        private delegate VkResult vkCreateDebugUtilsMessengerEXTDelegate(VkInstance instance, VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pMessenger);
+        private static vkCreateDebugUtilsMessengerEXTDelegate vkCreateDebugUtilsMessengerEXT_ptr;
+        public static VkResult vkCreateDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pMessenger)
+            => vkCreateDebugUtilsMessengerEXT_ptr(instance, pCreateInfo, pAllocator, pMessenger);
+
+        private void SetupDebugMessenger()
+        {
+#if DEBUG          
+            fixed (VkDebugUtilsMessengerEXT* debugMessengerPtr = &debugMessenger)
+            {
+                var funcPtr = VulkanNative.vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT".ToPointer());
+                if (funcPtr != IntPtr.Zero)
+                {
+                    vkCreateDebugUtilsMessengerEXT_ptr = Marshal.GetDelegateForFunctionPointer<vkCreateDebugUtilsMessengerEXTDelegate>(funcPtr);
+
+                    VkDebugUtilsMessengerCreateInfoEXT createInfo;
+                    this.PopulateDebugMessengerCreateInfo(out createInfo);
+                    Helpers.CheckErrors(vkCreateDebugUtilsMessengerEXT(instance, &createInfo, null, debugMessengerPtr));
+                }
+            }
+#endif
+        }
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        private delegate void vkDestroyDebugUtilsMessengerEXTDelegate(VkInstance instance, VkDebugUtilsMessengerEXT messenger, VkAllocationCallbacks* pAllocator);
+        private static vkDestroyDebugUtilsMessengerEXTDelegate vkDestroyDebugUtilsMessengerEXT_ptr;
+        private VkDebugUtilsMessengerEXT debugMessenger;
+
+        public static void vkDestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT messenger, VkAllocationCallbacks* pAllocator)
+            => vkDestroyDebugUtilsMessengerEXT_ptr(instance, messenger, pAllocator);
+
+        private void DestroyDebugMessenger()
+        {
+#if DEBUG
+            var funcPtr = VulkanNative.vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT".ToPointer());
+            if (funcPtr != IntPtr.Zero)
+            {
+                vkDestroyDebugUtilsMessengerEXT_ptr = Marshal.GetDelegateForFunctionPointer<vkDestroyDebugUtilsMessengerEXTDelegate>(funcPtr);
+                vkDestroyDebugUtilsMessengerEXT(instance, debugMessenger, null);
+            }
+#endif
         }
     }
 }
