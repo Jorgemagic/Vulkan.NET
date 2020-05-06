@@ -22,10 +22,20 @@ namespace HelloTriangle
         private void InitVulkan()
         {
             this.CreateInstance();
+
             this.SetupDebugMessenger();
+
             this.CreateSurface();
+
             this.PickPhysicalDevice();
+
             this.CreateLogicalDevice();
+
+            this.CreateSwapChain();
+
+            this.CreateImageViews();
+
+            this.CreateGraphicsPipeline();
         }
 
         private void MainLoop()
@@ -44,9 +54,19 @@ namespace HelloTriangle
 
         private void CleanUp()
         {
+            foreach (var imageView in this.swapChainImageViews)
+            {
+                VulkanNative.vkDestroyImageView(device, imageView, null);
+            }
+
+            VulkanNative.vkDestroySwapchainKHR(device, swapChain, null);
+
             VulkanNative.vkDestroyDevice(device, null);
+
             this.DestroyDebugMessenger();
+
             VulkanNative.vkDestroySurfaceKHR(instance, surface, null);
+
             VulkanNative.vkDestroyInstance(instance, null);
 
             window.Dispose();
@@ -56,8 +76,11 @@ namespace HelloTriangle
         public void Run()
         {
             this.InitWindow();
+
             this.InitVulkan();
+
             this.MainLoop();
+
             this.CleanUp();
         }   
     }
