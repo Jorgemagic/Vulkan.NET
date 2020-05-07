@@ -35,7 +35,11 @@ namespace HelloTriangle
 
             this.CreateImageViews();
 
+            this.CreateRenderPass();
+
             this.CreateGraphicsPipeline();
+
+            this.CreateFramebuffers();
         }
 
         private void MainLoop()
@@ -54,23 +58,34 @@ namespace HelloTriangle
 
         private void CleanUp()
         {
-            foreach (var imageView in this.swapChainImageViews)
+            foreach (var framebuffer in this.swapChainFramebuffers)
             {
-                VulkanNative.vkDestroyImageView(device, imageView, null);
+                VulkanNative.vkDestroyFramebuffer(this.device, framebuffer, null);
             }
 
-            VulkanNative.vkDestroySwapchainKHR(device, swapChain, null);
+            VulkanNative.vkDestroyPipeline(this.device, this.graphicsPipeline, null);
 
-            VulkanNative.vkDestroyDevice(device, null);
+            VulkanNative.vkDestroyPipelineLayout(this.device, this.pipelineLayout, null);
+
+            VulkanNative.vkDestroyRenderPass(this.device, this.renderPass, null);
+
+            foreach (var imageView in this.swapChainImageViews)
+            {
+                VulkanNative.vkDestroyImageView(this.device, imageView, null);
+            }
+
+            VulkanNative.vkDestroySwapchainKHR(this.device, this.swapChain, null);
+
+            VulkanNative.vkDestroyDevice(this.device, null);
 
             this.DestroyDebugMessenger();
 
-            VulkanNative.vkDestroySurfaceKHR(instance, surface, null);
+            VulkanNative.vkDestroySurfaceKHR(this.instance, this.surface, null);
 
-            VulkanNative.vkDestroyInstance(instance, null);
+            VulkanNative.vkDestroyInstance(this.instance, null);
 
-            window.Dispose();
-            window.Close();
+            this.window.Dispose();
+            this.window.Close();
         }
 
         public void Run()
