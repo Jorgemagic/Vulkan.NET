@@ -111,13 +111,13 @@ namespace HelloTriangle
             for (uint i = 0; i < queueFamilyCount; i++)
             {
                 var queueFamily = queueFamilies[i];
-                if ((queueFamily.queueFlags & VkQueueFlagBits.VK_QUEUE_GRAPHICS_BIT) == 0)
+                if ((queueFamily.queueFlags & VkQueueFlagBits.VK_QUEUE_GRAPHICS_BIT) != 0)
                 {                    
                     indices.graphicsFamily = i;
                 }
 
                 VkBool32 presentSupport = false;
-                Helpers.CheckErrors(VulkanNative.vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, surface, &presentSupport));
+                Helpers.CheckErrors(VulkanNative.vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, this.surface, &presentSupport));
 
                 if (presentSupport)
                 {

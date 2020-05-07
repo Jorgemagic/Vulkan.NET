@@ -35,7 +35,17 @@ namespace HelloTriangle
                 pColorAttachments = &colorAttachmentRef,
             };
 
-            // Render  pass
+            // Render  pass            
+            VkSubpassDependency dependency = new VkSubpassDependency()
+            {
+                srcSubpass = VulkanNative.VK_SUBPASS_EXTERNAL,
+                dstSubpass = 0,
+                srcStageMask = VkPipelineStageFlagBits.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                srcAccessMask = 0,
+                dstStageMask = VkPipelineStageFlagBits.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                dstAccessMask = VkAccessFlagBits.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+            };
+
             VkRenderPassCreateInfo renderPassInfo = new VkRenderPassCreateInfo()
             {
                 sType = VkStructureType.VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
@@ -43,6 +53,8 @@ namespace HelloTriangle
                 pAttachments = &colorAttachment,
                 subpassCount = 1,
                 pSubpasses = &subpass,
+                dependencyCount = 1,
+                pDependencies = &dependency,
             };
 
             fixed (VkRenderPass* renderPassPtr = &this.renderPass)

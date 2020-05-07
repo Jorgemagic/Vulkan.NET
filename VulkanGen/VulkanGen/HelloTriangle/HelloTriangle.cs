@@ -40,6 +40,12 @@ namespace HelloTriangle
             this.CreateGraphicsPipeline();
 
             this.CreateFramebuffers();
+
+            this.CreateCommandPool();
+
+            this.CreateCommandBuffers();
+
+            this.CreateSemaphores();
         }
 
         private void MainLoop()
@@ -53,11 +59,20 @@ namespace HelloTriangle
             while (!isClosing)
             {
                 Application.DoEvents();
+
+                this.DrawFrame();
             }
+
+            Helpers.CheckErrors(VulkanNative.vkDeviceWaitIdle(this.device));
         }
 
         private void CleanUp()
         {
+            VulkanNative.vkDestroySemaphore(this.device, this.renderFinishedSemaphore, null);
+            VulkanNative.vkDestroySemaphore(this.device, this.imageAvailableSemaphore, null);
+
+            VulkanNative.vkDestroyCommandPool(this.device, this.commandPool, null);
+
             foreach (var framebuffer in this.swapChainFramebuffers)
             {
                 VulkanNative.vkDestroyFramebuffer(this.device, framebuffer, null);
