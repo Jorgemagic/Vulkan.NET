@@ -278,7 +278,7 @@ namespace VulkanRaytracing
                 sType = VkStructureType.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
                 pNext = &memAllocFlagsInfo,
                 allocationSize = alloctionSize,
-                memoryTypeIndex = FindMemoryType(allocationMemoryBits, VkMemoryPropertyFlagBits.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VkMemoryPropertyFlagBits.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT), //  VkMemoryPropertyFlagBits.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+                memoryTypeIndex = FindMemoryType(allocationMemoryBits, VkMemoryPropertyFlagBits.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
             };
             result = VulkanNative.vkAllocateMemory(device, &memAllocInfo, null, &accelerationMemory.memory);
             Helpers.CheckErrors(result);
