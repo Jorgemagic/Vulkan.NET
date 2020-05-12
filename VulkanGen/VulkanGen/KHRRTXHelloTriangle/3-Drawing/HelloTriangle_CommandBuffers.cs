@@ -27,7 +27,7 @@ namespace KHRRTXHelloTriangle
             }
         }
 
-        private void CreateCommandBuffers()
+        /*private void CreateCommandBuffers()
         {
             this.commandBuffers = new VkCommandBuffer[this.swapChainFramebuffers.Length];
 
@@ -83,6 +83,6 @@ namespace KHRRTXHelloTriangle
 
                 Helpers.CheckErrors(VulkanNative.vkEndCommandBuffer(this.commandBuffers[i]));
             }
-        }
+        }*/
     }
 }

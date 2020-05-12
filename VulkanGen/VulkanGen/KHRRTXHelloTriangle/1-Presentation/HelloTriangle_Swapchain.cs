@@ -57,7 +57,7 @@ namespace KHRRTXHelloTriangle
         {
             foreach (var availableFormat in availableFormats)
             {
-                if (availableFormat.format == VkFormat.VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VkColorSpaceKHR.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+                if (availableFormat.format == VkFormat.VK_FORMAT_B8G8R8A8_UNORM && availableFormat.colorSpace == VkColorSpaceKHR.VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
                 {
                     return availableFormat;
                 }
@@ -119,7 +119,7 @@ namespace KHRRTXHelloTriangle
             createInfo.imageColorSpace = surfaceFormat.colorSpace;
             createInfo.imageExtent = extent;
             createInfo.imageArrayLayers = 1;
-            createInfo.imageUsage = VkImageUsageFlagBits.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+            createInfo.imageUsage = VkImageUsageFlagBits.VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VkImageUsageFlagBits.VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
             QueueFamilyIndices indices = this.FindQueueFamilies(this.physicalDevice);
             uint* queueFamilyIndices = stackalloc uint[] { indices.graphicsFamily.Value, indices.presentFamily.Value };

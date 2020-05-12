@@ -10,8 +10,10 @@ namespace KHRRTXHelloTriangle
         string[] deviceExtensions = new string[] {
             "VK_KHR_swapchain",
             "VK_KHR_ray_tracing",
+            "VK_KHR_maintenance3",
             "VK_KHR_pipeline_library",
             "VK_KHR_deferred_host_operations",
+            "VK_KHR_buffer_device_address"
         };
 
         private VkDevice device;

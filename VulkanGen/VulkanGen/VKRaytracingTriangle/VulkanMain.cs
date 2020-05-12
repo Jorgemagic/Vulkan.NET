@@ -14,6 +14,8 @@ namespace VulkanRaytracing
 {
     public unsafe class VulkanMain
     {
+        private const int VK_NULL_HANDLE = 0;
+
         VkDevice device;
         VkInstance instance;
         VkPhysicalDevice physicalDevice;
@@ -887,179 +889,141 @@ namespace VulkanRaytracing
         {
             Debug.WriteLine("Creating Bottom-Level Acceleration Structure..");
 
-            VkAccelerationStructureCreateGeometryTypeInfoKHR accelerationCreateGeometryInfo = new VkAccelerationStructureCreateGeometryTypeInfoKHR()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_GEOMETRY_TYPE_INFO_KHR,
-                pNext = null,
-                geometryType = VkGeometryTypeKHR.VK_GEOMETRY_TYPE_TRIANGLES_KHR,
-                maxPrimitiveCount = 128,
-                indexType = VkIndexType.VK_INDEX_TYPE_UINT32,
-                maxVertexCount = 8,
-                vertexFormat = VkFormat.VK_FORMAT_R32G32B32_SFLOAT,
-                allowsTransforms = false,
-            };
+            VkAccelerationStructureCreateGeometryTypeInfoKHR accelerationCreateGeometryInfo = default;
+            accelerationCreateGeometryInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_GEOMETRY_TYPE_INFO_KHR;
+            accelerationCreateGeometryInfo.pNext = null;
+            accelerationCreateGeometryInfo.geometryType = VkGeometryTypeKHR.VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+            accelerationCreateGeometryInfo.maxPrimitiveCount = 128;
+            accelerationCreateGeometryInfo.indexType = VkIndexType.VK_INDEX_TYPE_UINT32;
+            accelerationCreateGeometryInfo.maxVertexCount = 8;
+            accelerationCreateGeometryInfo.vertexFormat = VkFormat.VK_FORMAT_R32G32B32_SFLOAT;
+            accelerationCreateGeometryInfo.allowsTransforms = false;
 
-            VkAccelerationStructureCreateInfoKHR accelerationInfo = new VkAccelerationStructureCreateInfoKHR()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
-                pNext = null,
-                compactedSize = 0,
-                type = VkAccelerationStructureTypeKHR.VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
-                flags = VkBuildAccelerationStructureFlagBitsKHR.VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
-                maxGeometryCount = 1,
-                pGeometryInfos = &accelerationCreateGeometryInfo,
-                deviceAddress = 0, // VkDeviceAddress??
-            };
+            VkAccelerationStructureCreateInfoKHR accelerationInfo = default;
+            accelerationInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+            accelerationInfo.pNext = null;
+            accelerationInfo.compactedSize = 0;
+            accelerationInfo.type = VkAccelerationStructureTypeKHR.VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+            accelerationInfo.flags = VkBuildAccelerationStructureFlagBitsKHR.VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+            accelerationInfo.maxGeometryCount = 1;
+            accelerationInfo.pGeometryInfos = &accelerationCreateGeometryInfo;
+            accelerationInfo.deviceAddress = VK_NULL_HANDLE;
 
-            VkResult result;
             fixed (VkAccelerationStructureKHR* bottomLevelASPtr = &bottomLevelAS)
             {
-                result = VulkanNative.vkCreateAccelerationStructureKHR(device, &accelerationInfo, null, bottomLevelASPtr);
-                Helpers.CheckErrors(result);
+                Helpers.CheckErrors(VulkanNative.vkCreateAccelerationStructureKHR(device, &accelerationInfo, null, bottomLevelASPtr));
             }
 
-            AccelerationMemory objectMemory = CreateAccelerationScratchBuffer(bottomLevelAS, VkAccelerationStructureMemoryRequirementsTypeKHR.VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_OBJECT_KHR);
+            AccelerationMemory objectMemory = this.CreateAccelerationScratchBuffer(bottomLevelAS, VkAccelerationStructureMemoryRequirementsTypeKHR.VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_OBJECT_KHR);
 
-            BindAccelerationMemory(bottomLevelAS, objectMemory.memory);
+            this.BindAccelerationMemory(bottomLevelAS, objectMemory.memory);
 
-            AccelerationMemory buildScratchMemory = CreateAccelerationScratchBuffer(bottomLevelAS, VkAccelerationStructureMemoryRequirementsTypeKHR.VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_KHR);
+            AccelerationMemory buildScratchMemory = this.CreateAccelerationScratchBuffer(bottomLevelAS, VkAccelerationStructureMemoryRequirementsTypeKHR.VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_KHR);
 
             // Get bottom level acceleration structure handle for use in top level instances
-            VkAccelerationStructureDeviceAddressInfoKHR devAddrInfo = new VkAccelerationStructureDeviceAddressInfoKHR()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR,
-                accelerationStructure = bottomLevelAS,
-            };
+            VkAccelerationStructureDeviceAddressInfoKHR devAddrInfo = default;
+            devAddrInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
+            devAddrInfo.accelerationStructure = bottomLevelAS;
             bottomLevelASHandle = VulkanNative.vkGetAccelerationStructureDeviceAddressKHR(device, &devAddrInfo);
 
-            float[] vertices = new float[] {
-                    +1.0f, +1.0f, +0.0f,
-                    -1.0f, +1.0f, +0.0f,
-                    +0.0f, -1.0f, +0.0f
-                };
-            uint[] indices = { 0, 1, 2 };
-            //Vector3[] vertices = new Vector3[]
-            //{
-            //    new Vector3( 1.0f,  1.0f, 1.0f),
-            //    new Vector3(-1.0f,  1.0f, 1.0f),
-            //    new Vector3( 1.0f, -1.0f, 1.0f),
-            //};
-
-            //ushort[] indices = { 0, 1, 2 };
-
-            AccelerationMemory vertexBuffer = CreateMappedBuffer(vertices, (uint)(sizeof(float) * vertices.Length));
-
-            AccelerationMemory indexBuffer = CreateMappedBuffer(indices, (uint)(sizeof(uint) * indices.Length));
-
-            VkAccelerationStructureGeometryKHR accelerationGeometry = new VkAccelerationStructureGeometryKHR()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
-                pNext = null,
-                flags = VkGeometryFlagBitsKHR.VK_GEOMETRY_OPAQUE_BIT_KHR,
-                geometryType = VkGeometryTypeKHR.VK_GEOMETRY_TYPE_TRIANGLES_KHR,
-                geometry = new VkAccelerationStructureGeometryDataKHR()
-                {
-                    triangles = new VkAccelerationStructureGeometryTrianglesDataKHR()
-                    {
-                        sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR,
-                        pNext = null,
-                        vertexFormat = VkFormat.VK_FORMAT_R32G32B32_SFLOAT,
-                        vertexData = new VkDeviceOrHostAddressConstKHR() { deviceAddress = vertexBuffer.memoryAddress },
-                        vertexStride = (ulong)3 * sizeof(float),
-                        indexType = VkIndexType.VK_INDEX_TYPE_UINT32,
-                        indexData = new VkDeviceOrHostAddressConstKHR() { deviceAddress = indexBuffer.memoryAddress },
-                        transformData = default,
-                    },
-                },
+            // clang-format off
+            float[] vertices = {
+                +1.0f, +1.0f, +0.0f,
+                -1.0f, +1.0f, +0.0f,
+                +0.0f, -1.0f, +0.0f
             };
+            uint[] indices = { 0, 1, 2 };
+            // clang-format on
 
-            VkAccelerationStructureGeometryKHR[] accelerationGeometries = new VkAccelerationStructureGeometryKHR[] { accelerationGeometry };
-            VkAccelerationStructureBuildGeometryInfoKHR accelerationBuildGeometryInfo;
-            fixed (VkAccelerationStructureGeometryKHR* ppGeometries = &accelerationGeometries[0])
+            AccelerationMemory vertexBuffer = this.CreateMappedBuffer(vertices, (uint)(sizeof(float) * vertices.Length));
+
+            AccelerationMemory indexBuffer = this.CreateMappedBuffer(indices, (uint)(sizeof(uint) * indices.Length));
+
+            VkAccelerationStructureGeometryKHR accelerationGeometry = default;
+            accelerationGeometry.sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+            accelerationGeometry.pNext = null;
+            accelerationGeometry.flags = VkGeometryFlagBitsKHR.VK_GEOMETRY_OPAQUE_BIT_KHR;
+            accelerationGeometry.geometryType = VkGeometryTypeKHR.VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+            accelerationGeometry.geometry = default;
+            accelerationGeometry.geometry.triangles = default;
+            accelerationGeometry.geometry.triangles.sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+            accelerationGeometry.geometry.triangles.pNext = null;
+            accelerationGeometry.geometry.triangles.vertexFormat = VkFormat.VK_FORMAT_R32G32B32_SFLOAT;
+            accelerationGeometry.geometry.triangles.vertexData.deviceAddress =
+                vertexBuffer.memoryAddress;
+            accelerationGeometry.geometry.triangles.vertexStride = 3 * sizeof(float);
+            accelerationGeometry.geometry.triangles.indexType = VkIndexType.VK_INDEX_TYPE_UINT32;
+            accelerationGeometry.geometry.triangles.indexData.deviceAddress = indexBuffer.memoryAddress;
+            accelerationGeometry.geometry.triangles.transformData.deviceAddress = 0;
+
+            VkAccelerationStructureGeometryKHR* ppGeometries = stackalloc VkAccelerationStructureGeometryKHR[] { accelerationGeometry };
+
+            VkAccelerationStructureBuildGeometryInfoKHR accelerationBuildGeometryInfo = default;
+            accelerationBuildGeometryInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+            accelerationBuildGeometryInfo.pNext = null;
+            accelerationBuildGeometryInfo.type = VkAccelerationStructureTypeKHR.VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+            accelerationBuildGeometryInfo.flags = VkBuildAccelerationStructureFlagBitsKHR.VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+            accelerationBuildGeometryInfo.update = false;
+            accelerationBuildGeometryInfo.srcAccelerationStructure = VK_NULL_HANDLE;
+            accelerationBuildGeometryInfo.dstAccelerationStructure = bottomLevelAS;
+            accelerationBuildGeometryInfo.geometryArrayOfPointers = false;
+            accelerationBuildGeometryInfo.geometryCount = 1;
+            accelerationBuildGeometryInfo.ppGeometries = &ppGeometries;
+            accelerationBuildGeometryInfo.scratchData.deviceAddress = buildScratchMemory.memoryAddress;
+
+            VkAccelerationStructureBuildOffsetInfoKHR accelerationBuildOffsetInfo = default;
+            accelerationBuildOffsetInfo.primitiveCount = 1;
+            accelerationBuildOffsetInfo.primitiveOffset = 0x0;
+            accelerationBuildOffsetInfo.firstVertex = 0;
+            accelerationBuildOffsetInfo.transformOffset = 0x0;
+
+            VkAccelerationStructureBuildOffsetInfoKHR*[] accelerationBuildOffsets = { &accelerationBuildOffsetInfo };
+
+            VkCommandBuffer commandBuffer;
+
+            VkCommandBufferAllocateInfo commandBufferAllocateInfo = default;
+            commandBufferAllocateInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+            commandBufferAllocateInfo.pNext = null;
+            commandBufferAllocateInfo.commandPool = commandPool;
+            commandBufferAllocateInfo.level = VkCommandBufferLevel.VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+            commandBufferAllocateInfo.commandBufferCount = 1;
+            Helpers.CheckErrors(VulkanNative.vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, &commandBuffer));
+
+            VkCommandBufferBeginInfo commandBufferBeginInfo = default;
+            commandBufferBeginInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            commandBufferBeginInfo.pNext = null;
+            commandBufferBeginInfo.flags = VkCommandBufferUsageFlagBits.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+            VulkanNative.vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo);
+
+            fixed (VkAccelerationStructureBuildOffsetInfoKHR** accelerationBuildOffsetsPtr = &accelerationBuildOffsets[0])
             {
-                accelerationBuildGeometryInfo = new VkAccelerationStructureBuildGeometryInfoKHR()
-                {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
-                    pNext = null,
-                    type = VkAccelerationStructureTypeKHR.VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
-                    flags = VkBuildAccelerationStructureFlagBitsKHR.VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
-                    update = false,
-                    srcAccelerationStructure = default,
-                    dstAccelerationStructure = bottomLevelAS,
-                    geometryArrayOfPointers = false,
-                    geometryCount = 1,
-                    ppGeometries = &ppGeometries,
-                    scratchData = new VkDeviceOrHostAddressKHR() { deviceAddress = buildScratchMemory.memoryAddress },
-                };
+                VulkanNative.vkCmdBuildAccelerationStructureKHR(commandBuffer, 1, &accelerationBuildGeometryInfo, accelerationBuildOffsetsPtr);
             }
 
-            VkAccelerationStructureBuildOffsetInfoKHR accelerationBuildOffsetInfo = new VkAccelerationStructureBuildOffsetInfoKHR()
-            {
-                primitiveCount = 1,
-                primitiveOffset = 0x0,
-                firstVertex = 0,
-                transformOffset = 0x0,
-            };
+            Helpers.CheckErrors(VulkanNative.vkEndCommandBuffer(commandBuffer));
 
-            VkAccelerationStructureBuildOffsetInfoKHR* accelerationBuildOffsets = stackalloc VkAccelerationStructureBuildOffsetInfoKHR[] { accelerationBuildOffsetInfo };
+            VkSubmitInfo submitInfo = default;
+            submitInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            submitInfo.pNext = null;
+            submitInfo.commandBufferCount = 1;
+            submitInfo.pCommandBuffers = &commandBuffer;
 
-            VkCommandBuffer commandBuffer = default;
+            VkFence fence = VK_NULL_HANDLE;
+            VkFenceCreateInfo fenceInfo = default;
+            fenceInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+            fenceInfo.pNext = null;
 
-            VkCommandBufferAllocateInfo commandBufferAllocateInfo = new VkCommandBufferAllocateInfo()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-                pNext = null,
-                commandPool = commandPool,
-                level = VkCommandBufferLevel.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-                commandBufferCount = 1,
-            };
-            result = VulkanNative.vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, &commandBuffer);
-            Helpers.CheckErrors(result);
-
-            VkCommandBufferBeginInfo commandBufferBeginInfo = new VkCommandBufferBeginInfo()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-                pNext = null,
-                flags = VkCommandBufferUsageFlagBits.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-            };
-            result = VulkanNative.vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo);
-            Helpers.CheckErrors(result);
-
-            VulkanNative.vkCmdBuildAccelerationStructureKHR(commandBuffer, 1, &accelerationBuildGeometryInfo, &accelerationBuildOffsets);
-
-            result = VulkanNative.vkEndCommandBuffer(commandBuffer);
-            Helpers.CheckErrors(result);
-
-            VkSubmitInfo submitInfo = new VkSubmitInfo()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_SUBMIT_INFO,
-                pNext = null,
-                commandBufferCount = 1,
-                pCommandBuffers = &commandBuffer,
-            };
-
-            VkFence fence = default;
-            VkFenceCreateInfo fenceInfo = new VkFenceCreateInfo()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-                pNext = null,
-            };
-
-            result = VulkanNative.vkCreateFence(device, &fenceInfo, null, &fence);
-            Helpers.CheckErrors(result);
-
-            result = VulkanNative.vkQueueSubmit(queue, 1, &submitInfo, fence);
-            Helpers.CheckErrors(result);
-
-            result = VulkanNative.vkWaitForFences(device, 1, &fence, true, ulong.MaxValue);
-            Helpers.CheckErrors(result);
+            Helpers.CheckErrors(VulkanNative.vkCreateFence(this.device, &fenceInfo, null, &fence));
+            Helpers.CheckErrors(VulkanNative.vkQueueSubmit(this.queue, 1, &submitInfo, fence));
+            Helpers.CheckErrors(VulkanNative.vkWaitForFences(device, 1, &fence, true, ulong.MaxValue));
 
             VulkanNative.vkDestroyFence(device, fence, null);
-            VulkanNative.vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+            VulkanNative.vkFreeCommandBuffers(this.device, this.commandPool, 1, &commandBuffer);
 
             // make sure bottom AS handle is valid
             if (bottomLevelASHandle == 0)
             {
+                Debug.WriteLine("Invalid Handle to BLAS");
                 throw new Exception("Invalid Handle to BLAS");
             }
         }
@@ -1067,167 +1031,137 @@ namespace VulkanRaytracing
         {
             Debug.WriteLine("Creating Top-Level Acceleration Structure..");
 
-            VkAccelerationStructureCreateGeometryTypeInfoKHR accelerationCreateGeometryInfo = new VkAccelerationStructureCreateGeometryTypeInfoKHR()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_GEOMETRY_TYPE_INFO_KHR,
-                pNext = null,
-                geometryType = VkGeometryTypeKHR.VK_GEOMETRY_TYPE_INSTANCES_KHR,
-                maxPrimitiveCount = 1,
-            };
-            VkAccelerationStructureCreateInfoKHR accelerationInfo = new VkAccelerationStructureCreateInfoKHR()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
-                pNext = null,
-                compactedSize = 0,
-                type = VkAccelerationStructureTypeKHR.VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
-                flags = VkBuildAccelerationStructureFlagBitsKHR.VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
-                maxGeometryCount = 1,
-                pGeometryInfos = &accelerationCreateGeometryInfo,
-                deviceAddress = 0,
-            };
+            VkAccelerationStructureCreateGeometryTypeInfoKHR accelerationCreateGeometryInfo = default;
+            accelerationCreateGeometryInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_GEOMETRY_TYPE_INFO_KHR;
+            accelerationCreateGeometryInfo.pNext = null;
+            accelerationCreateGeometryInfo.geometryType = VkGeometryTypeKHR.VK_GEOMETRY_TYPE_INSTANCES_KHR;
+            accelerationCreateGeometryInfo.maxPrimitiveCount = 1;
 
-            VkResult result;
+            VkAccelerationStructureCreateInfoKHR accelerationInfo = default;
+            accelerationInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+            accelerationInfo.pNext = null;
+            accelerationInfo.compactedSize = 0;
+            accelerationInfo.type = VkAccelerationStructureTypeKHR.VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+            accelerationInfo.flags = VkBuildAccelerationStructureFlagBitsKHR.VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+            accelerationInfo.maxGeometryCount = 1;
+            accelerationInfo.pGeometryInfos = &accelerationCreateGeometryInfo;
+            accelerationInfo.deviceAddress = VK_NULL_HANDLE;
+
             fixed (VkAccelerationStructureKHR* topLevelASPtr = &topLevelAS)
             {
-                result = VulkanNative.vkCreateAccelerationStructureKHR(device, &accelerationInfo, null, topLevelASPtr);
-                Helpers.CheckErrors(result);
+                Helpers.CheckErrors(VulkanNative.vkCreateAccelerationStructureKHR(device, &accelerationInfo, null, topLevelASPtr));
             }
 
-            AccelerationMemory objectMemory = CreateAccelerationScratchBuffer(topLevelAS, VkAccelerationStructureMemoryRequirementsTypeKHR.VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_OBJECT_KHR);
+            AccelerationMemory objectMemory = this.CreateAccelerationScratchBuffer(topLevelAS, VkAccelerationStructureMemoryRequirementsTypeKHR.VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_OBJECT_KHR);
 
-            BindAccelerationMemory(topLevelAS, objectMemory.memory);
+            this.BindAccelerationMemory(topLevelAS, objectMemory.memory);
 
-            AccelerationMemory buildScratchMemory = CreateAccelerationScratchBuffer(topLevelAS, VkAccelerationStructureMemoryRequirementsTypeKHR.VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_KHR);
+            AccelerationMemory buildScratchMemory = this.CreateAccelerationScratchBuffer(topLevelAS, VkAccelerationStructureMemoryRequirementsTypeKHR.VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_KHR);
 
             VkAccelerationStructureInstanceKHR[] instances = new VkAccelerationStructureInstanceKHR[]
             {
-                    new VkAccelerationStructureInstanceKHR()
-                    {
-                        transform =
-                        {
-                            matrix_0 = 1,
-                            matrix_1 = 0,
-                            matrix_2 = 0,
-                            matrix_3 = 0,
-
-                            matrix_4 = 0,
-                            matrix_5 = 1,
-                            matrix_6 = 0,
-                            matrix_7 = 0,
-
-                            matrix_8 = 0,
-                            matrix_9 = 0,
-                            matrix_10 = 1,
-                            matrix_11 = 0,
-                        },
-                        instanceCustomIndex = 0,
-                        mask = 0xff,
-                        instanceShaderBindingTableRecordOffset = 0x0,
-                        flags = VkGeometryInstanceFlagBitsKHR.VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR,
-                        accelerationStructureReference = bottomLevelASHandle,
-                    }
-            };
-
-            AccelerationMemory instanceBuffer = this.CreateMappedBuffer(instances, (uint)(sizeof(VkAccelerationStructureInstanceKHR) * instances.Length));
-
-            VkAccelerationStructureGeometryKHR accelerationGeometry = new VkAccelerationStructureGeometryKHR()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
-                pNext = null,
-                flags = VkGeometryFlagBitsKHR.VK_GEOMETRY_OPAQUE_BIT_KHR,
-                geometryType = VkGeometryTypeKHR.VK_GEOMETRY_TYPE_INSTANCES_KHR,
-                geometry = new VkAccelerationStructureGeometryDataKHR()
+                new VkAccelerationStructureInstanceKHR()
                 {
-                    instances = new VkAccelerationStructureGeometryInstancesDataKHR()
+                    transform = new VkTransformMatrixKHR()
                     {
-                        sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR,
-                        pNext = null,
-                        arrayOfPointers = false,
-                        data = new VkDeviceOrHostAddressConstKHR() { deviceAddress = instanceBuffer.memoryAddress },
+                        matrix_0 = 1,
+                        matrix_1 = 0,
+                        matrix_2 = 0,
+                        matrix_3 = 0,
+
+                        matrix_4 = 0,
+                        matrix_5 = 1,
+                        matrix_6 = 0,
+                        matrix_7 = 0,
+
+                        matrix_8 = 0,
+                        matrix_9 = 0,
+                        matrix_10 = 1,
+                        matrix_11 = 0,
                     },
+                    instanceCustomIndex = 0,
+                    mask = 0xff,
+                    instanceShaderBindingTableRecordOffset = 0x0,
+                    flags = VkGeometryInstanceFlagBitsKHR.VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR,
+                    accelerationStructureReference = bottomLevelASHandle
                 }
             };
 
-            VkAccelerationStructureGeometryKHR[] accelerationGeometries = new VkAccelerationStructureGeometryKHR[] { accelerationGeometry };
-            VkAccelerationStructureBuildGeometryInfoKHR accelerationBuildGeometryInfo;
-            fixed (VkAccelerationStructureGeometryKHR* ppGeometries = &accelerationGeometries[0])
+
+            AccelerationMemory instanceBuffer = this.CreateMappedBuffer(instances, (uint)(sizeof(VkAccelerationStructureInstanceKHR) * instances.Length));
+
+            VkAccelerationStructureGeometryKHR accelerationGeometry = default;
+            accelerationGeometry.sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+            accelerationGeometry.pNext = null;
+            accelerationGeometry.flags = VkGeometryFlagBitsKHR.VK_GEOMETRY_OPAQUE_BIT_KHR;
+            accelerationGeometry.geometryType = VkGeometryTypeKHR.VK_GEOMETRY_TYPE_INSTANCES_KHR;
+            accelerationGeometry.geometry = default;
+            accelerationGeometry.geometry.instances = default;
+            accelerationGeometry.geometry.instances.sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
+            accelerationGeometry.geometry.instances.pNext = null;
+            accelerationGeometry.geometry.instances.arrayOfPointers = false;
+            accelerationGeometry.geometry.instances.data.deviceAddress = instanceBuffer.memoryAddress;
+
+            VkAccelerationStructureGeometryKHR* ppGeometries = stackalloc VkAccelerationStructureGeometryKHR[] { accelerationGeometry };
+
+            VkAccelerationStructureBuildGeometryInfoKHR accelerationBuildGeometryInfo = default;
+            accelerationBuildGeometryInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+            accelerationBuildGeometryInfo.pNext = null;
+            accelerationBuildGeometryInfo.type = VkAccelerationStructureTypeKHR.VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+            accelerationBuildGeometryInfo.flags = VkBuildAccelerationStructureFlagBitsKHR.VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+            accelerationBuildGeometryInfo.update = false;
+            accelerationBuildGeometryInfo.srcAccelerationStructure = VK_NULL_HANDLE;
+            accelerationBuildGeometryInfo.dstAccelerationStructure = topLevelAS;
+            accelerationBuildGeometryInfo.geometryArrayOfPointers = false;
+            accelerationBuildGeometryInfo.geometryCount = 1;
+            accelerationBuildGeometryInfo.ppGeometries = &ppGeometries;
+            accelerationBuildGeometryInfo.scratchData.deviceAddress = buildScratchMemory.memoryAddress;
+
+            VkAccelerationStructureBuildOffsetInfoKHR accelerationBuildOffsetInfo = default;
+            accelerationBuildOffsetInfo.primitiveCount = 1;
+            accelerationBuildOffsetInfo.primitiveOffset = 0x0;
+            accelerationBuildOffsetInfo.firstVertex = 0;
+            accelerationBuildOffsetInfo.transformOffset = 0x0;
+
+            VkAccelerationStructureBuildOffsetInfoKHR*[] accelerationBuildOffsets = { &accelerationBuildOffsetInfo };
+
+            VkCommandBuffer commandBuffer;
+
+            VkCommandBufferAllocateInfo commandBufferAllocateInfo = default;
+            commandBufferAllocateInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+            commandBufferAllocateInfo.pNext = null;
+            commandBufferAllocateInfo.commandPool = commandPool;
+            commandBufferAllocateInfo.level = VkCommandBufferLevel.VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+            commandBufferAllocateInfo.commandBufferCount = 1;
+            Helpers.CheckErrors(VulkanNative.vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, &commandBuffer));
+
+            VkCommandBufferBeginInfo commandBufferBeginInfo = default;
+            commandBufferBeginInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            commandBufferBeginInfo.pNext = null;
+            commandBufferBeginInfo.flags = VkCommandBufferUsageFlagBits.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+            VulkanNative.vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo);
+
+            fixed (VkAccelerationStructureBuildOffsetInfoKHR** accelerationBuildOffsetsPtr = &accelerationBuildOffsets[0])
             {
-                accelerationBuildGeometryInfo = new VkAccelerationStructureBuildGeometryInfoKHR()
-                {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
-                    pNext = null,
-                    type = VkAccelerationStructureTypeKHR.VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
-                    flags = VkBuildAccelerationStructureFlagBitsKHR.VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
-                    update = false,
-                    srcAccelerationStructure = default,
-                    dstAccelerationStructure = topLevelAS,
-                    geometryArrayOfPointers = false,
-                    geometryCount = 1,
-                    ppGeometries = &ppGeometries,
-                    scratchData = new VkDeviceOrHostAddressKHR() { deviceAddress = buildScratchMemory.memoryAddress },
-                };
+                VulkanNative.vkCmdBuildAccelerationStructureKHR(commandBuffer, 1, &accelerationBuildGeometryInfo, accelerationBuildOffsetsPtr);
             }
 
-            VkAccelerationStructureBuildOffsetInfoKHR accelerationBuildOffsetInfo = new VkAccelerationStructureBuildOffsetInfoKHR()
-            {
-                primitiveCount = 1,
-                primitiveOffset = 0x0,
-                firstVertex = 0,
-                transformOffset = 0x0,
-            };
+            Helpers.CheckErrors(VulkanNative.vkEndCommandBuffer(commandBuffer));
 
-            VkAccelerationStructureBuildOffsetInfoKHR* accelerationBuildOffsets = stackalloc VkAccelerationStructureBuildOffsetInfoKHR[] { accelerationBuildOffsetInfo };
+            VkSubmitInfo submitInfo = default;
+            submitInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            submitInfo.pNext = null;
+            submitInfo.commandBufferCount = 1;
+            submitInfo.pCommandBuffers = &commandBuffer;
 
-            VkCommandBuffer commandBuffer = default;
+            VkFence fence = VK_NULL_HANDLE;
+            VkFenceCreateInfo fenceInfo = default;
+            fenceInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+            fenceInfo.pNext = null;
 
-            VkCommandBufferAllocateInfo commandBufferAllocateInfo = new VkCommandBufferAllocateInfo()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-                pNext = null,
-                commandPool = commandPool,
-                level = VkCommandBufferLevel.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-                commandBufferCount = 1,
-            };
-            result = VulkanNative.vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, &commandBuffer);
-            Helpers.CheckErrors(result);
-
-            VkCommandBufferBeginInfo commandBufferBeginInfo = new VkCommandBufferBeginInfo()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-                pNext = null,
-                flags = VkCommandBufferUsageFlagBits.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-            };
-            result = VulkanNative.vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo);
-            Helpers.CheckErrors(result);
-
-            VulkanNative.vkCmdBuildAccelerationStructureKHR(commandBuffer, 1, &accelerationBuildGeometryInfo, &accelerationBuildOffsets);
-
-            result = VulkanNative.vkEndCommandBuffer(commandBuffer);
-            Helpers.CheckErrors(result);
-
-            VkSubmitInfo submitInfo = new VkSubmitInfo()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_SUBMIT_INFO,
-                pNext = null,
-                commandBufferCount = 1,
-                pCommandBuffers = &commandBuffer,
-            };
-
-            VkFence fence = default;
-            VkFenceCreateInfo fenceInfo = new VkFenceCreateInfo()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-                pNext = null,
-            };
-
-            result = VulkanNative.vkCreateFence(device, &fenceInfo, null, &fence);
-            Helpers.CheckErrors(result);
-
-            result = VulkanNative.vkQueueSubmit(queue, 1, &submitInfo, fence);
-            Helpers.CheckErrors(result);
-
-            result = VulkanNative.vkWaitForFences(device, 1, &fence, true, ulong.MaxValue);
-            Helpers.CheckErrors(result);
+            Helpers.CheckErrors(VulkanNative.vkCreateFence(device, &fenceInfo, null, &fence));
+            Helpers.CheckErrors(VulkanNative.vkQueueSubmit(queue, 1, &submitInfo, fence));
+            Helpers.CheckErrors(VulkanNative.vkWaitForFences(device, 1, &fence, true, ulong.MaxValue));
 
             VulkanNative.vkDestroyFence(device, fence, null);
             VulkanNative.vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
@@ -1236,240 +1170,189 @@ namespace VulkanRaytracing
         {
             Debug.WriteLine("Creating Offsceen Buffer..");
 
-            VkImageCreateInfo imageInfo = new VkImageCreateInfo()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-                pNext = null,
-                imageType = VkImageType.VK_IMAGE_TYPE_2D,
-                format = desiredSurfaceFormat,
-                extent = new VkExtent3D() { width = desiredWindowWidth, height = desiredWindowHeight, depth = 1 },
-                mipLevels = 1,
-                arrayLayers = 1,
-                samples = VkSampleCountFlagBits.VK_SAMPLE_COUNT_1_BIT,
-                tiling = VkImageTiling.VK_IMAGE_TILING_OPTIMAL,
-                usage = VkImageUsageFlagBits.VK_IMAGE_USAGE_STORAGE_BIT | VkImageUsageFlagBits.VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-                sharingMode = VkSharingMode.VK_SHARING_MODE_EXCLUSIVE,
-                queueFamilyIndexCount = 0,
-                pQueueFamilyIndices = null,
-                initialLayout = VkImageLayout.VK_IMAGE_LAYOUT_UNDEFINED,
-            };
+            VkImageCreateInfo imageInfo = default;
+            imageInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+            imageInfo.pNext = null;
+            imageInfo.imageType = VkImageType.VK_IMAGE_TYPE_2D;
+            imageInfo.format = desiredSurfaceFormat;
+            imageInfo.extent = new VkExtent3D { width = desiredWindowWidth, height = desiredWindowHeight, depth = 1 };
+            imageInfo.mipLevels = 1;
+            imageInfo.arrayLayers = 1;
+            imageInfo.samples = VkSampleCountFlagBits.VK_SAMPLE_COUNT_1_BIT;
+            imageInfo.tiling = VkImageTiling.VK_IMAGE_TILING_OPTIMAL;
+            imageInfo.usage = VkImageUsageFlagBits.VK_IMAGE_USAGE_STORAGE_BIT | VkImageUsageFlagBits.VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+            imageInfo.sharingMode = VkSharingMode.VK_SHARING_MODE_EXCLUSIVE;
+            imageInfo.queueFamilyIndexCount = 0;
+            imageInfo.pQueueFamilyIndices = null;
+            imageInfo.initialLayout = VkImageLayout.VK_IMAGE_LAYOUT_UNDEFINED;
 
-            VkResult result;
             fixed (VkImage* offscreenBufferPtr = &offscreenBuffer)
             {
-                result = VulkanNative.vkCreateImage(device, &imageInfo, null, offscreenBufferPtr);
-                Helpers.CheckErrors(result);
+                Helpers.CheckErrors(VulkanNative.vkCreateImage(device, &imageInfo, null, offscreenBufferPtr));
             }
 
-            VkMemoryRequirements memoryRequirements = new VkMemoryRequirements();
+            VkMemoryRequirements memoryRequirements = default;
             VulkanNative.vkGetImageMemoryRequirements(device, offscreenBuffer, &memoryRequirements);
 
-            VkMemoryAllocateInfo memoryAllocateInfo = new VkMemoryAllocateInfo()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-                pNext = null,
-                allocationSize = memoryRequirements.size,
-                memoryTypeIndex = FindMemoryType(memoryRequirements.memoryTypeBits, VkMemoryPropertyFlagBits.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
-            };
+            VkMemoryAllocateInfo memoryAllocateInfo = default;
+            memoryAllocateInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+            memoryAllocateInfo.pNext = null;
+            memoryAllocateInfo.allocationSize = memoryRequirements.size;
+            memoryAllocateInfo.memoryTypeIndex = this.FindMemoryType(memoryRequirements.memoryTypeBits, VkMemoryPropertyFlagBits.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-            fixed (VkDeviceMemory* offscreenBufferMemoryPtr = &offscreenBufferMemory)
+            fixed (VkDeviceMemory* offscreenBufferMemoryPtr = &this.offscreenBufferMemory)
             {
-                result = VulkanNative.vkAllocateMemory(device, &memoryAllocateInfo, null, offscreenBufferMemoryPtr);
-                Helpers.CheckErrors(result);
+                Helpers.CheckErrors(VulkanNative.vkAllocateMemory(device, &memoryAllocateInfo, null, offscreenBufferMemoryPtr));
             }
 
-            result = VulkanNative.vkBindImageMemory(device, offscreenBuffer, offscreenBufferMemory, 0);
-            Helpers.CheckErrors(result);
+            Helpers.CheckErrors(VulkanNative.vkBindImageMemory(device, offscreenBuffer, offscreenBufferMemory, 0));
 
-            VkImageViewCreateInfo imageViewInfo = new VkImageViewCreateInfo()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                pNext = null,
-                viewType = VkImageViewType.VK_IMAGE_VIEW_TYPE_2D,
-                format = desiredSurfaceFormat,
-                subresourceRange = new VkImageSubresourceRange()
-                {
-                    aspectMask = VkImageAspectFlagBits.VK_IMAGE_ASPECT_COLOR_BIT,
-                    baseMipLevel = 0,
-                    levelCount = 1,
-                    baseArrayLayer = 0,
-                    layerCount = 1,
-                },
-                image = offscreenBuffer,
-                flags = 0,
-                components = new VkComponentMapping()
-                {
-                    r = VkComponentSwizzle.VK_COMPONENT_SWIZZLE_R,
-                    g = VkComponentSwizzle.VK_COMPONENT_SWIZZLE_G,
-                    b = VkComponentSwizzle.VK_COMPONENT_SWIZZLE_B,
-                    a = VkComponentSwizzle.VK_COMPONENT_SWIZZLE_A,
-                }
-            };
+            VkImageViewCreateInfo imageViewInfo = default;
+            imageViewInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            imageViewInfo.pNext = null;
+            imageViewInfo.viewType = VkImageViewType.VK_IMAGE_VIEW_TYPE_2D;
+            imageViewInfo.format = desiredSurfaceFormat;
+            imageViewInfo.subresourceRange = default;
+            imageViewInfo.subresourceRange.aspectMask = VkImageAspectFlagBits.VK_IMAGE_ASPECT_COLOR_BIT;
+            imageViewInfo.subresourceRange.baseMipLevel = 0;
+            imageViewInfo.subresourceRange.levelCount = 1;
+            imageViewInfo.subresourceRange.baseArrayLayer = 0;
+            imageViewInfo.subresourceRange.layerCount = 1;
+            imageViewInfo.image = offscreenBuffer;
+            imageViewInfo.flags = 0;
+            imageViewInfo.components.r = VkComponentSwizzle.VK_COMPONENT_SWIZZLE_R;
+            imageViewInfo.components.g = VkComponentSwizzle.VK_COMPONENT_SWIZZLE_G;
+            imageViewInfo.components.b = VkComponentSwizzle.VK_COMPONENT_SWIZZLE_B;
+            imageViewInfo.components.a = VkComponentSwizzle.VK_COMPONENT_SWIZZLE_A;
 
-            fixed (VkImageView* offscreenBufferViewPtr = &offscreenBufferView)
+            fixed (VkImageView* offscreenBufferViewPtr = &this.offscreenBufferView)
             {
-                result = VulkanNative.vkCreateImageView(device, &imageViewInfo, null, offscreenBufferViewPtr);
-                Helpers.CheckErrors(result);
+                Helpers.CheckErrors(VulkanNative.vkCreateImageView(device, &imageViewInfo, null, offscreenBufferViewPtr));
             }
         }
         private void RTDescriptorSetLayout()
         {
             Debug.WriteLine("Creating RT Descriptor Set Layout..");
 
-            VkDescriptorSetLayoutBinding accelerationStructureLayoutBinding = new VkDescriptorSetLayoutBinding()
-            {
-                binding = 0,
-                descriptorType = VkDescriptorType.VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
-                descriptorCount = 1,
-                stageFlags = VkShaderStageFlagBits.VK_SHADER_STAGE_RAYGEN_BIT_KHR,
-                pImmutableSamplers = null,
-            };
+            VkDescriptorSetLayoutBinding accelerationStructureLayoutBinding = default;
+            accelerationStructureLayoutBinding.binding = 0;
+            accelerationStructureLayoutBinding.descriptorType = VkDescriptorType.VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+            accelerationStructureLayoutBinding.descriptorCount = 1;
+            accelerationStructureLayoutBinding.stageFlags = VkShaderStageFlagBits.VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+            accelerationStructureLayoutBinding.pImmutableSamplers = null;
 
-            VkDescriptorSetLayoutBinding storageImageLayoutBinding = new VkDescriptorSetLayoutBinding()
-            {
-                binding = 1,
-                descriptorType = VkDescriptorType.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                descriptorCount = 1,
-                stageFlags = VkShaderStageFlagBits.VK_SHADER_STAGE_RAYGEN_BIT_KHR,
-            };
+            VkDescriptorSetLayoutBinding storageImageLayoutBinding = default;
+            storageImageLayoutBinding.binding = 1;
+            storageImageLayoutBinding.descriptorType = VkDescriptorType.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+            storageImageLayoutBinding.descriptorCount = 1;
+            storageImageLayoutBinding.stageFlags = VkShaderStageFlagBits.VK_SHADER_STAGE_RAYGEN_BIT_KHR;
 
             VkDescriptorSetLayoutBinding* bindings = stackalloc VkDescriptorSetLayoutBinding[] { accelerationStructureLayoutBinding, storageImageLayoutBinding };
-            VkDescriptorSetLayoutCreateInfo layoutInfo = new VkDescriptorSetLayoutCreateInfo()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-                pNext = null,
-                flags = VkDescriptorSetLayoutCreateFlagBits.None,
-                bindingCount = (uint)2,
-                pBindings = bindings,
-            };
 
-            VkResult result;
-            fixed (VkDescriptorSetLayout* descriptorSetLayoutPtr = &descriptorSetLayout)
+            VkDescriptorSetLayoutCreateInfo layoutInfo = default;
+            layoutInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+            layoutInfo.pNext = null;
+            layoutInfo.flags = 0;
+            layoutInfo.bindingCount = 2;
+            layoutInfo.pBindings = bindings;
+
+            fixed (VkDescriptorSetLayout* descriptorSetLayoutPtr = &this.descriptorSetLayout)
             {
-                result = VulkanNative.vkCreateDescriptorSetLayout(device, &layoutInfo, null, descriptorSetLayoutPtr);
-                Helpers.CheckErrors(result);
+                Helpers.CheckErrors(VulkanNative.vkCreateDescriptorSetLayout(device, &layoutInfo, null, descriptorSetLayoutPtr));
             }
         }
         private void RTDescriptorSet()
         {
             Debug.WriteLine("Creating RT Descriptor Set..");
 
-            VkDescriptorPoolSize* poolSizes = stackalloc VkDescriptorPoolSize[] {
-                new VkDescriptorPoolSize()
-                {
-                    type = VkDescriptorType.VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
-                    descriptorCount = 1,
-                },
-                new VkDescriptorPoolSize()
-                {
-                    type = VkDescriptorType.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                    descriptorCount = 1,
-                }
+            VkDescriptorPoolSize* poolSizes = stackalloc VkDescriptorPoolSize[]
+            {
+                new VkDescriptorPoolSize() { type = VkDescriptorType.VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, descriptorCount = 1 },
+                new VkDescriptorPoolSize() { type = VkDescriptorType.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, descriptorCount = 1 }
             };
 
-            VkDescriptorPoolCreateInfo descriptorPoolInfo = new VkDescriptorPoolCreateInfo()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-                pNext = null,
-                flags = 0,
-                maxSets = 1,
-                poolSizeCount = (uint)2,
-                pPoolSizes = poolSizes,
-            };
+            VkDescriptorPoolCreateInfo descriptorPoolInfo = default;
+            descriptorPoolInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+            descriptorPoolInfo.pNext = null;
+            descriptorPoolInfo.flags = 0;
+            descriptorPoolInfo.maxSets = 1;
+            descriptorPoolInfo.poolSizeCount = 2;
+            descriptorPoolInfo.pPoolSizes = poolSizes;
 
-            VkResult result;
-            fixed (VkDescriptorPool* descriptorPoolPtr = &descriptorPool)
+            fixed (VkDescriptorPool* descriptorPoolPtr = &this.descriptorPool)
             {
-                result = VulkanNative.vkCreateDescriptorPool(device, &descriptorPoolInfo, null, descriptorPoolPtr);
-                Helpers.CheckErrors(result);
+                Helpers.CheckErrors(VulkanNative.vkCreateDescriptorPool(device, &descriptorPoolInfo, null, descriptorPoolPtr));
             }
 
-            VkDescriptorSetAllocateInfo descriptorSetAllocateInfo;
+            VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = default;
+            descriptorSetAllocateInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            descriptorSetAllocateInfo.pNext = null;
+            descriptorSetAllocateInfo.descriptorPool = descriptorPool;
+            descriptorSetAllocateInfo.descriptorSetCount = 1;
             fixed (VkDescriptorSetLayout* descriptorSetLayoutPtr = &descriptorSetLayout)
             {
-                descriptorSetAllocateInfo = new VkDescriptorSetAllocateInfo()
-                {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-                    pNext = null,
-                    descriptorPool = descriptorPool,
-                    descriptorSetCount = 1,
-                    pSetLayouts = descriptorSetLayoutPtr,
-                };
+                descriptorSetAllocateInfo.pSetLayouts = descriptorSetLayoutPtr;
             }
 
             fixed (VkDescriptorSet* descriptorSetPtr = &descriptorSet)
             {
-                result = VulkanNative.vkAllocateDescriptorSets(device, &descriptorSetAllocateInfo, descriptorSetPtr);
-                Helpers.CheckErrors(result);
+                Helpers.CheckErrors(VulkanNative.vkAllocateDescriptorSets(device, &descriptorSetAllocateInfo, descriptorSetPtr));
             }
 
             VkWriteDescriptorSetAccelerationStructureKHR descriptorAccelerationStructureInfo;
+            descriptorAccelerationStructureInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+            descriptorAccelerationStructureInfo.pNext = null;
+            descriptorAccelerationStructureInfo.accelerationStructureCount = 1;
             fixed (VkAccelerationStructureKHR* topLevelASPtr = &topLevelAS)
             {
-                descriptorAccelerationStructureInfo = new VkWriteDescriptorSetAccelerationStructureKHR()
-                {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
-                    pNext = null,
-                    accelerationStructureCount = 1,
-                    pAccelerationStructures = topLevelASPtr,
-                };
+                descriptorAccelerationStructureInfo.pAccelerationStructures = topLevelASPtr;
             }
 
-            VkWriteDescriptorSet accelerationStructureWrite = new VkWriteDescriptorSet()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                pNext = &descriptorAccelerationStructureInfo,
-                dstSet = descriptorSet,
-                dstBinding = 0,
-                descriptorCount = 1,
-                descriptorType = VkDescriptorType.VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
-            };
+            VkWriteDescriptorSet accelerationStructureWrite = default;
+            accelerationStructureWrite.sType = VkStructureType.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            accelerationStructureWrite.pNext = &descriptorAccelerationStructureInfo;
+            accelerationStructureWrite.dstSet = descriptorSet;
+            accelerationStructureWrite.dstBinding = 0;
+            accelerationStructureWrite.descriptorCount = 1;
+            accelerationStructureWrite.descriptorType = VkDescriptorType.VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
 
-            VkDescriptorImageInfo storageImageInfo = new VkDescriptorImageInfo()
-            {
-                sampler = default,
-                imageView = offscreenBufferView,
-                imageLayout = VkImageLayout.VK_IMAGE_LAYOUT_GENERAL,
-            };
+            VkDescriptorImageInfo storageImageInfo = default;
+            storageImageInfo.sampler = VK_NULL_HANDLE;
+            storageImageInfo.imageView = offscreenBufferView;
+            storageImageInfo.imageLayout = VkImageLayout.VK_IMAGE_LAYOUT_GENERAL;
 
-            VkWriteDescriptorSet outputImageWrite = new VkWriteDescriptorSet()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                pNext = null,
-                dstSet = descriptorSet,
-                dstBinding = 1,
-                descriptorType = VkDescriptorType.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                descriptorCount = 1,
-                pImageInfo = &storageImageInfo,
-            };
+            VkWriteDescriptorSet outputImageWrite = default;
+            outputImageWrite.sType = VkStructureType.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            outputImageWrite.pNext = null;
+            outputImageWrite.dstSet = descriptorSet;
+            outputImageWrite.dstBinding = 1;
+            outputImageWrite.descriptorType = VkDescriptorType.VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+            outputImageWrite.descriptorCount = 1;
+            outputImageWrite.pImageInfo = &storageImageInfo;
 
             VkWriteDescriptorSet* descriptorWrites = stackalloc VkWriteDescriptorSet[] { accelerationStructureWrite, outputImageWrite };
-            VulkanNative.vkUpdateDescriptorSets(device, (uint)2, descriptorWrites, 0, null);
+
+            VulkanNative.vkUpdateDescriptorSets(device, 2, descriptorWrites, 0, null);
         }
         private void RTPipelineLayout()
         {
             Debug.WriteLine("Creating RT Pipeline Layout..");
 
-            VkPipelineLayoutCreateInfo pipelineLayoutInfo;
+            VkPipelineLayoutCreateInfo pipelineLayoutInfo = default;
+            pipelineLayoutInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+            pipelineLayoutInfo.pNext = null;
+            pipelineLayoutInfo.flags = 0;
+            pipelineLayoutInfo.setLayoutCount = 1;
             fixed (VkDescriptorSetLayout* descriptorSetLayoutPtr = &descriptorSetLayout)
             {
-                pipelineLayoutInfo = new VkPipelineLayoutCreateInfo()
-                {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-                    pNext = null,
-                    flags = 0,
-                    setLayoutCount = 1,
-                    pSetLayouts = descriptorSetLayoutPtr,
-                    pushConstantRangeCount = 0,
-                    pPushConstantRanges = null,
-                };
+                pipelineLayoutInfo.pSetLayouts = descriptorSetLayoutPtr;
             }
+            pipelineLayoutInfo.pushConstantRangeCount = 0;
+            pipelineLayoutInfo.pPushConstantRanges = null;
 
-            VkResult result;
             fixed (VkPipelineLayout* pipelineLayoutPtr = &pipelineLayout)
             {
-                result = VulkanNative.vkCreatePipelineLayout(device, &pipelineLayoutInfo, null, pipelineLayoutPtr);
-                Helpers.CheckErrors(result);
+                Helpers.CheckErrors(VulkanNative.vkCreatePipelineLayout(device, &pipelineLayoutInfo, null, pipelineLayoutPtr));
             }
         }
         private void RTPipeline()
@@ -1480,154 +1363,119 @@ namespace VulkanRaytracing
             byte[] rchitShaderSrc = File.ReadAllBytes("Shaders/ray-closest-hit.spv");
             byte[] rmissShaderSrc = File.ReadAllBytes("Shaders/ray-miss.spv");
 
-            VkPipelineShaderStageCreateInfo rayGenShaderStageInfo = new VkPipelineShaderStageCreateInfo()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                pNext = null,
-                stage = VkShaderStageFlagBits.VK_SHADER_STAGE_RAYGEN_BIT_KHR,
-                module = CreateShaderModule(rgenShaderSrc),
-                pName = "main".ToPointer(),
-            };
+            VkPipelineShaderStageCreateInfo rayGenShaderStageInfo = default;
+            rayGenShaderStageInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            rayGenShaderStageInfo.pNext = null;
+            rayGenShaderStageInfo.stage = VkShaderStageFlagBits.VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+            rayGenShaderStageInfo.module = CreateShaderModule(rgenShaderSrc);
+            rayGenShaderStageInfo.pName = "main".ToPointer();
 
-            VkPipelineShaderStageCreateInfo rayChitShaderStageInfo = new VkPipelineShaderStageCreateInfo()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                pNext = null,
-                stage = VkShaderStageFlagBits.VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
-                module = CreateShaderModule(rchitShaderSrc),
-                pName = "main".ToPointer(),
-            };
+            VkPipelineShaderStageCreateInfo rayChitShaderStageInfo = default;
+            rayChitShaderStageInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            rayChitShaderStageInfo.pNext = null;
+            rayChitShaderStageInfo.stage = VkShaderStageFlagBits.VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+            rayChitShaderStageInfo.module = CreateShaderModule(rchitShaderSrc);
+            rayChitShaderStageInfo.pName = "main".ToPointer();
 
-            VkPipelineShaderStageCreateInfo rayMissShaderStageInfo = new VkPipelineShaderStageCreateInfo()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                pNext = null,
-                stage = VkShaderStageFlagBits.VK_SHADER_STAGE_MISS_BIT_KHR,
-                module = CreateShaderModule(rmissShaderSrc),
-                pName = "main".ToPointer(),
-            };
+            VkPipelineShaderStageCreateInfo rayMissShaderStageInfo = default;
+            rayMissShaderStageInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            rayMissShaderStageInfo.pNext = null;
+            rayMissShaderStageInfo.stage = VkShaderStageFlagBits.VK_SHADER_STAGE_MISS_BIT_KHR;
+            rayMissShaderStageInfo.module = CreateShaderModule(rmissShaderSrc);
+            rayMissShaderStageInfo.pName = "main".ToPointer();
 
             VkPipelineShaderStageCreateInfo* shaderStages = stackalloc VkPipelineShaderStageCreateInfo[] { rayGenShaderStageInfo, rayChitShaderStageInfo, rayMissShaderStageInfo };
 
-            VkRayTracingShaderGroupCreateInfoKHR rayGenGroup = new VkRayTracingShaderGroupCreateInfoKHR()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
-                pNext = null,
-                type = VkRayTracingShaderGroupTypeKHR.VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
-                generalShader = 0,
-                closestHitShader = ~0U,
-                anyHitShader = ~0U,
-                intersectionShader = ~0U,
-            };
+            VkRayTracingShaderGroupCreateInfoKHR rayGenGroup = default;
+            rayGenGroup.sType = VkStructureType.VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+            rayGenGroup.pNext = null;
+            rayGenGroup.type = VkRayTracingShaderGroupTypeKHR.VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+            rayGenGroup.generalShader = 0;
+            rayGenGroup.closestHitShader = VulkanNative.VK_SHADER_UNUSED_KHR;
+            rayGenGroup.anyHitShader = VulkanNative.VK_SHADER_UNUSED_KHR;
+            rayGenGroup.intersectionShader = VulkanNative.VK_SHADER_UNUSED_KHR;
 
-            VkRayTracingShaderGroupCreateInfoKHR rayHitGroup = new VkRayTracingShaderGroupCreateInfoKHR()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
-                pNext = null,
-                type = VkRayTracingShaderGroupTypeKHR.VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR,
-                generalShader = ~0U,
-                closestHitShader = 1,
-                anyHitShader = ~0U,
-                intersectionShader = ~0U,
-            };
+            VkRayTracingShaderGroupCreateInfoKHR rayHitGroup = default;
+            rayHitGroup.sType = VkStructureType.VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+            rayHitGroup.pNext = null;
+            rayHitGroup.type = VkRayTracingShaderGroupTypeKHR.VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
+            rayHitGroup.generalShader = VulkanNative.VK_SHADER_UNUSED_KHR;
+            rayHitGroup.closestHitShader = 1;
+            rayHitGroup.anyHitShader = VulkanNative.VK_SHADER_UNUSED_KHR;
+            rayHitGroup.intersectionShader = VulkanNative.VK_SHADER_UNUSED_KHR;
 
-            VkRayTracingShaderGroupCreateInfoKHR rayMissGroup = new VkRayTracingShaderGroupCreateInfoKHR()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
-                pNext = null,
-                type = VkRayTracingShaderGroupTypeKHR.VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
-                generalShader = 2,
-                closestHitShader = ~0U,
-                anyHitShader = ~0U,
-                intersectionShader = ~0U,
-            };
+            VkRayTracingShaderGroupCreateInfoKHR rayMissGroup = default;
+            rayMissGroup.sType = VkStructureType.VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+            rayMissGroup.pNext = null;
+            rayMissGroup.type = VkRayTracingShaderGroupTypeKHR.VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+            rayMissGroup.generalShader = 2;
+            rayMissGroup.closestHitShader = VulkanNative.VK_SHADER_UNUSED_KHR;
+            rayMissGroup.anyHitShader = VulkanNative.VK_SHADER_UNUSED_KHR;
+            rayMissGroup.intersectionShader = VulkanNative.VK_SHADER_UNUSED_KHR;
 
             VkRayTracingShaderGroupCreateInfoKHR* shaderGroups = stackalloc VkRayTracingShaderGroupCreateInfoKHR[] { rayGenGroup, rayHitGroup, rayMissGroup };
 
-            VkRayTracingPipelineCreateInfoKHR pipelineInfo = new VkRayTracingPipelineCreateInfoKHR()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR,
-                pNext = null,
-                flags = 0,
-                stageCount = (uint)3,
-                pStages = shaderStages,
-                groupCount = (uint)3,
-                pGroups = shaderGroups,
-                maxRecursionDepth = 1,
-                libraries = new VkPipelineLibraryCreateInfoKHR()
-                {
-                    sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR,
-                    pNext = null,
-                    libraryCount = 0,
-                    pLibraries = null,
-                },
-                pLibraryInterface = null,
-                layout = pipelineLayout,
-                basePipelineHandle = default,
-                basePipelineIndex = 0,
-            };
+            VkRayTracingPipelineCreateInfoKHR pipelineInfo = default;
+            pipelineInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
+            pipelineInfo.pNext = null;
+            pipelineInfo.flags = 0;
+            pipelineInfo.stageCount = 3;
+            pipelineInfo.pStages = shaderStages;
+            pipelineInfo.groupCount = 3;
+            pipelineInfo.pGroups = shaderGroups;
+            pipelineInfo.maxRecursionDepth = 1;
+            pipelineInfo.libraries = default;
+            pipelineInfo.libraries.sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR;
+            pipelineInfo.libraries.pNext = null;
+            pipelineInfo.libraries.libraryCount = 0;
+            pipelineInfo.libraries.pLibraries = null;
+            pipelineInfo.pLibraryInterface = null;
+            pipelineInfo.layout = pipelineLayout;
+            pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+            pipelineInfo.basePipelineIndex = 0;
 
-
-            VkResult result;
             fixed (VkPipeline* pipelinePtr = &pipeline)
             {
-                result = VulkanNative.vkCreateRayTracingPipelinesKHR(device, default, 1, &pipelineInfo, null, pipelinePtr);
-                Helpers.CheckErrors(result);
+                Helpers.CheckErrors(VulkanNative.vkCreateRayTracingPipelinesKHR(device, 0, 1, &pipelineInfo, null, pipelinePtr));
             }
         }
         private void ShaderBindingTable()
         {
             Debug.WriteLine("Creating Shader Binding Table..");
 
-            shaderBindingTable = new AccelerationMemory();
+            AccelerationMemory newShaderBindingTable = default;
             shaderBindingTableSize = shaderBindingTableGroupCount * rayTracingProperties.shaderGroupHandleSize;
 
-            VkBufferCreateInfo bufferInfo = new VkBufferCreateInfo()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-                pNext = null,
-                size = shaderBindingTableSize,
-                usage = VkBufferUsageFlagBits.VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                sharingMode = VkSharingMode.VK_SHARING_MODE_EXCLUSIVE,
-                queueFamilyIndexCount = 0,
-                pQueueFamilyIndices = null,
-            };
+            VkBufferCreateInfo bufferInfo = default;
+            bufferInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+            bufferInfo.pNext = null;
+            bufferInfo.size = shaderBindingTableSize;
+            bufferInfo.usage = VkBufferUsageFlagBits.VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+            bufferInfo.sharingMode = VkSharingMode.VK_SHARING_MODE_EXCLUSIVE;
+            bufferInfo.queueFamilyIndexCount = 0;
+            bufferInfo.pQueueFamilyIndices = null;
+            Helpers.CheckErrors(VulkanNative.vkCreateBuffer(device, &bufferInfo, null, &newShaderBindingTable.buffer));
 
-            VkBuffer newBuffer;
-            VkResult result;
-            result = VulkanNative.vkCreateBuffer(device, &bufferInfo, null, &newBuffer);
-            Helpers.CheckErrors(result);
+            VkMemoryRequirements memoryRequirements = default;
+            VulkanNative.vkGetBufferMemoryRequirements(device, newShaderBindingTable.buffer, &memoryRequirements);
 
-            shaderBindingTable.buffer = newBuffer;
+            VkMemoryAllocateInfo memAllocInfo = default;
+            memAllocInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+            memAllocInfo.pNext = null;
+            memAllocInfo.allocationSize = memoryRequirements.size;
+            memAllocInfo.memoryTypeIndex = this.FindMemoryType(memoryRequirements.memoryTypeBits, VkMemoryPropertyFlagBits.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 
-            VkMemoryRequirements memoryRequirements = new VkMemoryRequirements();
-            VulkanNative.vkGetBufferMemoryRequirements(device, shaderBindingTable.buffer, &memoryRequirements);
+            Helpers.CheckErrors(VulkanNative.vkAllocateMemory(device, &memAllocInfo, null, &newShaderBindingTable.memory));
 
-            VkMemoryAllocateInfo memAllocInfo = new VkMemoryAllocateInfo()
-            {
-                sType = VkStructureType.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-                pNext = null,
-                allocationSize = memoryRequirements.size,
-                memoryTypeIndex = FindMemoryType(memoryRequirements.memoryTypeBits, VkMemoryPropertyFlagBits.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT),
-            };
+            Helpers.CheckErrors(VulkanNative.vkBindBufferMemory(device, newShaderBindingTable.buffer, newShaderBindingTable.memory, 0));
 
-            VkDeviceMemory newMemory;
-            result = VulkanNative.vkAllocateMemory(device, &memAllocInfo, null, &newMemory);
-            Helpers.CheckErrors(result);
+            IntPtr dstData;
+            Helpers.CheckErrors(VulkanNative.vkMapMemory(device, newShaderBindingTable.memory, 0, shaderBindingTableSize, 0, (void**)&dstData));
 
-            shaderBindingTable.memory = newMemory;
+            VulkanNative.vkGetRayTracingShaderGroupHandlesKHR(device, pipeline, 0, shaderBindingTableGroupCount, (UIntPtr)shaderBindingTableSize, (void*)dstData);
+            VulkanNative.vkUnmapMemory(device, newShaderBindingTable.memory);
 
-            result = VulkanNative.vkBindBufferMemory(device, shaderBindingTable.buffer, shaderBindingTable.memory, 0);
-            Helpers.CheckErrors(result);
-
-            void* dstData;
-            result = VulkanNative.vkMapMemory(device, shaderBindingTable.memory, 0, shaderBindingTableSize, 0, &dstData);
-            Helpers.CheckErrors(result);
-
-            result = VulkanNative.vkGetRayTracingShaderGroupHandlesKHR(device, pipeline, 0, shaderBindingTableGroupCount, (UIntPtr)shaderBindingTableSize, dstData);
-            Helpers.CheckErrors(result);
-
-            VulkanNative.vkUnmapMemory(device, shaderBindingTable.memory);
+            this.shaderBindingTable = newShaderBindingTable;
         }
 
         private VkExtent2D ChooseSwapExtent(VkSurfaceCapabilitiesKHR capabilities)

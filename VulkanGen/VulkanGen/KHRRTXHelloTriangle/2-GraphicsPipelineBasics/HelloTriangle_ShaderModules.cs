@@ -7,8 +7,8 @@ namespace KHRRTXHelloTriangle
 {
     public unsafe partial class HelloTriangle
     {
-        private VkPipelineLayout pipelineLayout;
-        private VkPipeline graphicsPipeline;
+        //private VkPipelineLayout pipelineLayout;
+        //private VkPipeline graphicsPipeline;
 
         VkShaderModule CreateShaderModule(byte[] code)
         {
@@ -27,7 +27,7 @@ namespace KHRRTXHelloTriangle
             return shaderModule;
         }
 
-        private void CreateGraphicsPipeline()
+        /*private void CreateGraphicsPipeline()
         {
             byte[] vertShaderCode = File.ReadAllBytes("Shaders/vert.spv");
             byte[] fragShaderCode = File.ReadAllBytes("Shaders/frag.spv");
@@ -197,6 +197,6 @@ namespace KHRRTXHelloTriangle
 
             VulkanNative.vkDestroyShaderModule(device, fragShaderModule, null);
             VulkanNative.vkDestroyShaderModule(device, vertShaderModule, null);
-        }
+        }*/
     }
 }

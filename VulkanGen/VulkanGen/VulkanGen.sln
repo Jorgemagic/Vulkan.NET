@@ -17,6 +17,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "HelloTriangle", "HelloTrian
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NVRTXHelloTriangle", "NVRTXHelloTraingle\NVRTXHelloTriangle.csproj", "{A3AFBA64-94F1-48F0-B63A-D491CB7956CA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KHRRTXHelloTriangle", "KHRRTXHelloTriangle\KHRRTXHelloTriangle.csproj", "{57082FA8-CE4A-4F2D-BCB8-E5C86B8DFAD7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -51,6 +53,10 @@ Global
 		{A3AFBA64-94F1-48F0-B63A-D491CB7956CA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A3AFBA64-94F1-48F0-B63A-D491CB7956CA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A3AFBA64-94F1-48F0-B63A-D491CB7956CA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{57082FA8-CE4A-4F2D-BCB8-E5C86B8DFAD7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{57082FA8-CE4A-4F2D-BCB8-E5C86B8DFAD7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{57082FA8-CE4A-4F2D-BCB8-E5C86B8DFAD7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{57082FA8-CE4A-4F2D-BCB8-E5C86B8DFAD7}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

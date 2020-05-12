@@ -33,15 +33,37 @@ namespace KHRRTXHelloTriangle
 
             this.CreateSwapChain();
 
-            this.CreateImageViews();
+            //this.CreateImageViews();
 
-            this.CreateRenderPass();
+            //this.CreateRenderPass();
 
-            this.CreateGraphicsPipeline();
+            //this.CreateGraphicsPipeline();
 
-            this.CreateFramebuffers();
+            //this.CreateFramebuffers();
 
-            this.CreateCommandPool();
+            this.CreateCommandPool();          
+
+            // Begin Raytracing
+
+            this.InitRayTracing();
+
+            this.CreateBottomLevelAS();
+
+            this.CreateTopLevelAS();
+
+            this.CreateOffscreenBuffer();
+
+            this.CreateRTDescriptorSetLayout();
+
+            this.CreateRTDescriptorSet();
+
+            this.CreateRTPipelineLayout();
+
+            this.CreateRTPipeline();
+
+            this.CreateShaderBindingTable();
+
+            // End Raytracing
 
             this.CreateCommandBuffers();
 
@@ -78,7 +100,7 @@ namespace KHRRTXHelloTriangle
                 VulkanNative.vkDestroyFramebuffer(this.device, framebuffer, null);
             }
 
-            VulkanNative.vkDestroyPipeline(this.device, this.graphicsPipeline, null);
+            VulkanNative.vkDestroyPipeline(this.device, this.pipeline, null);
 
             VulkanNative.vkDestroyPipelineLayout(this.device, this.pipelineLayout, null);
 
