@@ -95,21 +95,29 @@ namespace KHRRTXHelloTriangle
 
             VulkanNative.vkDestroyCommandPool(this.device, this.commandPool, null);
 
-            foreach (var framebuffer in this.swapChainFramebuffers)
-            {
-                VulkanNative.vkDestroyFramebuffer(this.device, framebuffer, null);
-            }
+            //foreach (var framebuffer in this.swapChainFramebuffers)
+            //{
+            //    VulkanNative.vkDestroyFramebuffer(this.device, framebuffer, null);
+            //}
+
+            VulkanNative.vkDestroyAccelerationStructureKHR(this.device, this.bottomLevelAS, null);
+
+            VulkanNative.vkDestroyAccelerationStructureKHR(this.device, this.topLevelAS, null);
+
+            VulkanNative.vkDestroyDescriptorSetLayout(this.device, this.descriptorSetLayout, null);
+
+            VulkanNative.vkDestroyDescriptorPool(this.device, this.descriptorPool, null);
 
             VulkanNative.vkDestroyPipeline(this.device, this.pipeline, null);
 
             VulkanNative.vkDestroyPipelineLayout(this.device, this.pipelineLayout, null);
 
-            VulkanNative.vkDestroyRenderPass(this.device, this.renderPass, null);
+            //VulkanNative.vkDestroyRenderPass(this.device, this.renderPass, null);
 
-            foreach (var imageView in this.swapChainImageViews)
-            {
-                VulkanNative.vkDestroyImageView(this.device, imageView, null);
-            }
+            //foreach (var imageView in this.swapChainImageViews)
+            //{
+            //    VulkanNative.vkDestroyImageView(this.device, imageView, null);
+            //}
 
             VulkanNative.vkDestroySwapchainKHR(this.device, this.swapChain, null);
 
